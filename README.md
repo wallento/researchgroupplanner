@@ -2,7 +2,7 @@
 
 ```shell
 pip install -r requirements.txt
-python manage.py makemigrations
+python manage.py makemigrations projects staffing
 python manage.py migrate
 ```
 
