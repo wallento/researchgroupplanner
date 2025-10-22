@@ -1,5 +1,5 @@
 django
-django_browser_reload
-django_model_info
-django_bootstrap5
+django-browser-reload
+django-model-info
+django-bootstrap5
 python-dateutil

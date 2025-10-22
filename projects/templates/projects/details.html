@@ -1,0 +1,137 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}{{ project.acronym }}{% endblock %}
+{% block heading %}{{ project.acronym }}{% endblock %}
+
+{% block content %}
+
+<h2>Übersicht</h2>
+
+<table class="table table-bordered">
+    <tr>
+        <th>Laufzeit:</th>
+        <td>{{ project.start_date }} - {{ project.end_date }}</td>
+    </tr>
+    <tr>
+        <th>Budget:</th>
+        <td>€ {{ project.budget_total }} (€ {{ project.allocated_sum }} allokiert, € {{ project.remain_sum }} nicht allokiert)</td>
+    </tr>
+</table>
+
+<h2>Budgetposten</h2>
+
+<table class="table table-bordered" style="height: 100px;">
+    <thead>
+        <tr>
+            <th scope="col" rowspan="2" class="align-middle">Posten</th>
+            <th scope="col" rowspan="2" class="align-middle">Budget</th>
+            <th scope="col" class="text-center" colspan="{{ project.get_years|length|add:"1" }}">Allokation</th>
+            <th scope="col" rowspan="2" class="align-middle">Nicht allokiert</th>
+        </tr>
+        <tr>
+            {% for year in project.get_years %}
+                <td>{{ year }}</td>
+            {% endfor %}
+            <th>Gesamt</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for budget in staff_budget_items %}
+            <tr>
+                <td>{{ budget.title }}</td>
+                <td>€ {{ budget.amount }}</td>
+                {% for year, amount in budget.years.items %}
+                    <td>€ {{ amount }}</td>
+                {% endfor %}
+                <td>€ {{ budget.projected_sum }}</td>
+                <td>€ {{ budget.remain }}</td>
+            </tr>
+        {% endfor %}
+        {% for budget in other_budget_items %}
+            <tr>
+                <td>{{ budget.title }}</td>
+                <td>€ {{ budget.amount }}</td>
+                {% for year, amount in budget.years.items %}
+                    <td>€ {{ amount }}</td>
+                {% endfor %}
+                <td>€ {{ budget.projected_sum }}</td>
+                <td>€ {{ budget.remain }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2>Staffing</h2>
+<!-- Google Charts Timeline for Employees and Projects -->
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+    google.charts.load('current', {'packages':['timeline']});
+    google.charts.setOnLoadCallback(drawChart);
+
+    function drawChart() {
+        var container = document.getElementById('timeline');
+        var chart = new google.visualization.Timeline(container);
+        var dataTable = new google.visualization.DataTable();
+
+        dataTable.addColumn({ type: 'string', id: 'Employee' });
+        dataTable.addColumn({ type: 'string', id: 'Category'});
+        dataTable.addColumn({ type: 'string', role: 'tooltip' });
+        dataTable.addColumn({ type: 'date', id: 'Start' });
+        dataTable.addColumn({ type: 'date', id: 'End' });
+
+        // Example data: [Employee, Project, Start, End]
+        dataTable.addRows([
+{% for assignment in timeline_assignments %}
+            [ '{{ assignment.employee }}', '{{ assignment.category }}', '{{ assignment.category }}', new Date("{{ assignment.start.isoformat }}"), new Date("{{ assignment.end.isoformat }}") ],
+{% endfor %}
+        ]);
+        // Dynamically set chart height based on number of rows
+        var rowCount = dataTable.getNumberOfRows();
+        container.style.height = (rowCount * 45 + 47) + 'px'; 
+
+        var options = {
+            timeline: { showRowLabels: true, showBarLabels: false },
+            hAxis: {
+                format: 'MMM yyyy',
+                minorGridlines: { count: 12 },
+                majorGridlines: { count: 2 },
+                minValue: new Date("{{ project.start_date.isoformat }}"),
+                maxValue: new Date("{{ project.end_date.isoformat }}"),
+            }
+        };
+
+        chart.draw(dataTable, options);
+    }
+</script>
+<div id="timeline" style="height: 500px;"></div>
+
+<h2>Personalbudgetmittel</h2>
+
+{% for budget in staff_budget_items %}
+<h3>{{ budget.title }}</h3>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Budget:</th>
+            <th style="text-align: right;">€ {{ budget.amount }}</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for staffing in budget.staff_assignments %}
+        <tr>
+            <td><a href="{% url 'staffing:details' staffing.assignment.employment.staff_member.id %}">{{ staffing.assignment.employment.staff_member }}</a><br/>({{ staffing.assignment.start_date }} - {{ staffing.assignment.end_date }})</td>
+            <td style="text-align: right;">€ {{ staffing.salary_sum }}</td>
+        </tr>
+    {% endfor %}
+        <tr>
+            <td><strong>Summe:</strong></td>
+            <td style="text-align: right;">€ {{ budget.projected_sum }}<br>(nicht allokiert: € {{ budget.remain }})</td>
+        </tr>
+    </tbody>
+</table>
+
+{% empty %}
+Keine Personalbudgetmittel vorhanden.
+{% endfor %}
+
+{% endblock %}
