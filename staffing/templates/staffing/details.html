@@ -1,0 +1,28 @@
+{% extends "controlling/base.html" %}
+
+{% load django_bootstrap5 %}
+
+{% block title %}{{ staff_member }}{% endblock %}
+{% block heading %}{{ staff_member }}{% endblock %}
+
+{% block content %}
+  <h2>Anstellungen & Gehälter</h2>
+
+    {% for employment in employments %}
+      <h3>{{ employment.get_category }} ({{ employment.start_date }} - {{ employment.end_date }}, {{ employment.percentage }}%)</h3>
+
+      <table class="table table-bordered">
+        <tr>
+            <td>Monat</td>
+            <td>Gehalt</td>
+        </tr>
+            {% for month, salary in employment.salaries_by_month.items %}
+            <tr>
+                <td>{{ month }}</td>
+                <td>€ {{ salary }}</td>
+            </tr>
+            {% endfor %}
+      </table>
+    {% endfor %}
+  </ul>
+{% endblock %}

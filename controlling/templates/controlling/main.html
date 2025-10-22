@@ -1,0 +1,122 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}Research Group Planning Tool{% endblock %}
+{% block heading %}Research Group Planning Tool{% endblock %}
+
+{% block content %}
+
+<h2 class="mt-2">Laufende und geplante Projekte</h2>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col"></th>
+            <th scope="col">Laufzeit</th>
+            <th scope="col">Budget</th>
+            <th scope="col">Personalbudgets</th>
+            <th scope="col">Andere Budgets</th>
+            <th scope="col">Overhead</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for project in projects %}
+            <tr>
+                <th scope="row"><a href="{% url 'projects:details' project.acronym %}">{{ project.acronym }}</a></th>
+                <td>{{ project.start_date }} - {{ project.end_date }}</td>
+                <td>€ {{ project.budget_total }}</td>
+                <td>
+                    {% for budget in project.staffbudgetitem_set.all %}
+                        <div>{{ budget.short_title }}: € {{ budget.amount }}</div>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% for budget in project.otherbudgetitem_set.all %}
+                        <div>{{ budget.short_title }}: € {{ budget.amount }}</div>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% for budget in project.overheadbudgetitem_set.all %}
+                        <div>€ {{ budget.amount }}</div>
+                    {% endfor %}
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+    google.charts.load('current', {'packages':['timeline']});
+    google.charts.setOnLoadCallback(drawChart);
+
+    function drawChart() {
+        var container = document.getElementById('timeline_projects');
+        var chart = new google.visualization.Timeline(container);
+        var dataTable = new google.visualization.DataTable();
+
+        dataTable.addColumn({ type: 'string', id: 'Project' });
+        dataTable.addColumn({ type: 'date', id: 'Start' });
+        dataTable.addColumn({ type: 'date', id: 'End' });
+
+        // Example data: [Employee, Project, Start, End]
+        dataTable.addRows([
+{% for project in projects %}
+            [ '{{ project.acronym }}', new Date("{{ project.start_date.isoformat }}"), new Date("{{ project.end_date.isoformat }}") ],
+{% endfor %}
+        ]);
+        // Dynamically set chart height based on number of rows
+        var rowCount = dataTable.getNumberOfRows();
+        container.style.height = (rowCount * 45 + 47) + 'px'; 
+
+        var options = {
+            timeline: { showRowLabels: true, showBarLabels: false },
+            hAxis: {
+                format: 'MMM yyyy',
+                minorGridlines: { count: 12 },
+                majorGridlines: { count: 2 },
+           }
+        };
+
+        chart.draw(dataTable, options);
+    }
+</script>
+<div id="timeline_projects" style="height: 500px;"></div>
+
+<h2 class="mt-2">Jahresscheiben</h2>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col"></th>
+            {% for year in budgets_per_year %}
+                <th scope="col">{{ year }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+            <tr>
+                <th scope="col">allokiert</th>
+                {% for year, data in budgets_per_year.items %}
+                    <td>€ {{ data.total }}</td>
+                {% endfor %}
+            </tr>
+    </tbody>
+</table>
+
+<h2 class="mt-2">Mitarbeitende</h2>
+
+<table>
+    <thead>
+        <tr>
+            <td>Name</td>
+        </tr>
+    </thead>
+    <tbody>
+        {% for staff in staff_list %}
+            <tr>
+                <td><a href="{% url 'staffing:details' staff.id %}">{{ staff }}</a></td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

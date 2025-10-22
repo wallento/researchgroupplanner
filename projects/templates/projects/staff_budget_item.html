@@ -1,0 +1,29 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}{{ project.acronym }}{% endblock %}
+{% block heading %}{{ project.acronym }}{% endblock %}
+
+{% block content %}
+
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Monat</th>
+            {% for staff_member in table_assignments.0 %}
+            <th>{{ staff_member }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+    {% for month, salaries in table_assignments.1.items %}
+        <tr>
+            <td>{{ month }}</td>
+            {% for staff_member in table_assignments.0 %}
+                <td>{% for salary in salaries.items %}{% if salary.0 == staff_member %} € {{ salary.1 }}{% endif %}{% endfor %}</td>
+            {% endfor %}
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

@@ -1,0 +1,58 @@
+{% load django_bootstrap5 %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}GroupPlanning{% endblock %}</title>
+
+    {% bootstrap_css %}
+
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary d-print-none">
+        <div class="container-fluid">
+            <a class="navbar-brand mx-2" href="/">Group Planning</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbar">
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="/" id="navbarDropdownProjects" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Projekte
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="navbarDropdownProjects">
+                            {% for project in group_projects %}
+                                <a class="dropdown-item" href="{% url 'projects:details' project.acronym %}">{{ project.acronym }}</a>
+                            {% endfor %}
+                        </div>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownStaff" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Mitarbeiter
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="navbarDropdownStaff">
+                            {% for staff in group_staff %}
+                                <a class="dropdown-item" href="{% url 'staffing:details' staff.id %}">{{ staff }}</a>
+                            {% endfor %}
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="text-center mt-4">
+            <h1 class="display-5 fw-bold text-body-emphasis">{% block heading %}Group Planning{% endblock %}</h1>
+        </div>
+
+        {% bootstrap_messages %}
+
+        {% block content %}{% endblock %}
+
+    </div>
+
+    {% bootstrap_javascript %}
+</body>
+</html>
