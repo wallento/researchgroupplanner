@@ -11,25 +11,30 @@ function copyFile(from, toDir) {
   cpSync(from, resolve(toDir, from.split('/').pop()));
 }
 
-copyFile(
+function copyWithOptionalMap(from, toDir) {
+  copyFile(from, toDir);
+  copyFile(`${from}.map`, toDir);
+}
+
+copyWithOptionalMap(
   resolve(root, 'node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css'),
   resolve(vendorRoot, 'vis-timeline')
 );
-copyFile(
+copyWithOptionalMap(
   resolve(root, 'node_modules/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js'),
   resolve(vendorRoot, 'vis-timeline')
 );
 
-copyFile(
+copyWithOptionalMap(
   resolve(root, 'node_modules/chart.js/dist/chart.umd.js'),
   resolve(vendorRoot, 'chartjs')
 );
 
-copyFile(
+copyWithOptionalMap(
   resolve(root, 'node_modules/bootstrap/dist/css/bootstrap.min.css'),
   resolve(vendorRoot, 'bootstrap')
 );
-copyFile(
+copyWithOptionalMap(
   resolve(root, 'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js'),
   resolve(vendorRoot, 'bootstrap')
 );
