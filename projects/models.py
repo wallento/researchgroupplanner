@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.exceptions import ValidationError
 
 EmploymentCategories = {
     'student': 'Studentische Hilfskraft',
@@ -14,6 +15,13 @@ class Project(models.Model):
     end_date = models.DateField()
     extension_planning_date = models.DateField(blank=True, null=True)
     budget_total = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def clean(self):
+        super().clean()
+        if self.extension_planning_date and self.extension_planning_date < self.end_date:
+            raise ValidationError({
+                "extension_planning_date": "Die kostenneutrale Verlängerung darf nicht vor dem regulären Enddatum liegen."
+            })
 
     def __str__(self):
         return self.acronym

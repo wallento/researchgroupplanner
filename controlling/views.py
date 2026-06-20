@@ -4,6 +4,7 @@ from .utils import render
 from projects.models import Landesstelle, Project
 from staffing.models import Employment, StaffMember
 from django.utils import timezone
+from django.db.models import Q
 
 from projects.checks import full_checks as projects_full_checks
 from staffing.checks import full_checks as staffing_full_checks
@@ -13,7 +14,11 @@ def main(request):
     projects_full_checks(request)
     staffing_full_checks(request)
 
-    projects = Project.objects.filter(end_date__gt=timezone.now()).order_by('start_date')
+    today = timezone.now().date()
+    projects = Project.objects.filter(
+        Q(extension_planning_date__isnull=False, extension_planning_date__gt=today)
+        | Q(extension_planning_date__isnull=True, end_date__gt=today)
+    ).order_by('start_date')
     staff = StaffMember.objects.all()
 
     budgets_per_year = {}

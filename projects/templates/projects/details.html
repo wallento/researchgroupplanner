@@ -10,7 +10,12 @@
 <table class="table table-bordered">
     <tr>
         <th>Laufzeit:</th>
-        <td>{{ project.start_date }} - {{ project.end_date }}</td>
+        <td>
+            {{ project.start_date }} - {{ project.end_date }}
+            {% if project.extension_planning_date and project.extension_planning_date > project.end_date %}
+                <br><span class="text-muted">kostenneutrale Verlängerung bis {{ project.extension_planning_date }}</span>
+            {% endif %}
+        </td>
     </tr>
     <tr>
         <th>Budget:</th>
@@ -86,6 +91,16 @@
 
     .timeline-shell .vis-timeline {
         border: 0;
+    }
+
+    .timeline-shell .vis-item {
+        background-color: #004990;
+        border-color: #003a73;
+        color: #ffffff;
+    }
+
+    .vis-item .vis-item-content {
+        color: #ffffff !important;
     }
 
     .vis-time-axis .vis-text {
