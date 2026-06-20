@@ -248,6 +248,51 @@ def warnings(request):
         "warnings_list": warnings_list,
     })
 
+
+def statistics(request):
+    projects = Project.objects.all().order_by("start_date")
+    yearly_totals = {}
+
+    for project in projects:
+        effective_end = project.end_date
+        if project.extension_planning_date and project.extension_planning_date > project.end_date:
+            effective_end = project.extension_planning_date
+
+        month_count = (
+            (effective_end.year - project.start_date.year) * 12
+            + (effective_end.month - project.start_date.month)
+            + 1
+        )
+        if month_count <= 0:
+            continue
+
+        monthly_share = (project.budget_total / Decimal(month_count))
+        current = project.start_date.replace(day=1)
+        end_month = effective_end.replace(day=1)
+
+        while current <= end_month:
+            key = str(current.year)
+            yearly_totals[key] = yearly_totals.get(key, Decimal("0.00")) + monthly_share
+            current += relativedelta(months=1)
+
+    sorted_years = sorted(yearly_totals.keys())
+    yearly_values = [yearly_totals[year].quantize(Decimal("0.01")) for year in sorted_years]
+
+    cumulative_values = []
+    running = Decimal("0.00")
+    for value in yearly_values:
+        running += value
+        cumulative_values.append(running.quantize(Decimal("0.01")))
+
+    total_third_party_funds = sum((project.budget_total for project in projects), Decimal("0.00")).quantize(Decimal("0.01"))
+
+    return render(request, "controlling/statistics.html", {
+        "statistics_years": sorted_years,
+        "statistics_yearly_values": [float(value) for value in yearly_values],
+        "statistics_cumulative_values": [float(value) for value in cumulative_values],
+        "statistics_total_third_party_funds": total_third_party_funds,
+    })
+
 # Create your views here.
 def main(request):
     projects_full_checks(request)

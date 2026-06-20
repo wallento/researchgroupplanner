@@ -1,0 +1,94 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}Statistik{% endblock %}
+{% block heading %}Statistik{% endblock %}
+
+{% block content %}
+<h2 class="mt-3">Drittmittel pro Jahr</h2>
+
+<div class="alert alert-success" role="alert">
+    <strong>Kumulierte Drittmittel (Gesamtdatenbank):</strong>
+    € {{ statistics_total_third_party_funds }}
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <canvas id="thirdPartyFundsChart" height="120"></canvas>
+    </div>
+</div>
+
+{{ statistics_years|json_script:"stats-years" }}
+{{ statistics_yearly_values|json_script:"stats-yearly-values" }}
+{{ statistics_cumulative_values|json_script:"stats-cumulative-values" }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    (function () {
+        var years = JSON.parse(document.getElementById('stats-years').textContent);
+        var yearlyValues = JSON.parse(document.getElementById('stats-yearly-values').textContent);
+        var cumulativeValues = JSON.parse(document.getElementById('stats-cumulative-values').textContent);
+
+        var canvas = document.getElementById('thirdPartyFundsChart');
+        if (!canvas || !years.length) {
+            return;
+        }
+
+        new Chart(canvas, {
+            data: {
+                labels: years,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Drittmittel pro Jahr',
+                        data: yearlyValues,
+                        backgroundColor: '#004990',
+                        borderColor: '#003a73',
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                    },
+                    {
+                        type: 'line',
+                        label: 'Kumuliert',
+                        data: cumulativeValues,
+                        borderColor: '#6da8f5',
+                        backgroundColor: '#6da8f5',
+                        tension: 0.25,
+                        pointRadius: 3,
+                        yAxisID: 'y',
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                var value = Number(context.raw || 0);
+                                return context.dataset.label + ': € ' + value.toLocaleString('de-DE', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                });
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function (value) {
+                                return '€ ' + Number(value).toLocaleString('de-DE');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    })();
+</script>
+{% endblock %}
