@@ -20,14 +20,12 @@
 
 {{ statistics_years|json_script:"stats-years" }}
 {{ statistics_yearly_values|json_script:"stats-yearly-values" }}
-{{ statistics_cumulative_values|json_script:"stats-cumulative-values" }}
 
 <script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
 <script>
     (function () {
         var years = JSON.parse(document.getElementById('stats-years').textContent);
         var yearlyValues = JSON.parse(document.getElementById('stats-yearly-values').textContent);
-        var cumulativeValues = JSON.parse(document.getElementById('stats-cumulative-values').textContent);
 
         var canvas = document.getElementById('thirdPartyFundsChart');
         if (!canvas || !years.length) {
@@ -45,16 +43,6 @@
                         backgroundColor: '#004990',
                         borderColor: '#003a73',
                         borderWidth: 1,
-                        yAxisID: 'y',
-                    },
-                    {
-                        type: 'line',
-                        label: 'Kumuliert',
-                        data: cumulativeValues,
-                        borderColor: '#6da8f5',
-                        backgroundColor: '#6da8f5',
-                        tension: 0.25,
-                        pointRadius: 3,
                         yAxisID: 'y',
                     }
                 ]
