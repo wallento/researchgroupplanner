@@ -43,6 +43,7 @@
         .gp-navbar .navbar-nav .nav-link:focus {
             color: #ffffff !important;
         }
+
     </style>
 
 </head>
@@ -55,15 +56,10 @@
             </button>
             <div class="collapse navbar-collapse" id="navbar">
                 <ul class="navbar-nav">
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="/" id="navbarDropdownProjects" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'projects:index' %}">
                             Projekte
                         </a>
-                        <div class="dropdown-menu" aria-labelledby="navbarDropdownProjects">
-                            {% for project in group_projects %}
-                                <a class="dropdown-item" href="{% url 'projects:details' project.acronym %}">{{ project.acronym }}</a>
-                            {% endfor %}
-                        </div>
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownStaff" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -86,6 +82,7 @@
                         </div>
                     </li>
                 </ul>
+
             </div>
         </div>
     </nav>

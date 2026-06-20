@@ -1,5 +1,7 @@
 from decimal import Decimal
 from controlling.utils import render
+from django.db.models import Q
+from django.utils import timezone
 
 from .models import Landesstelle, StaffBudgetItem, Project
 from staffing.models import StaffAssignment, StaffFundingAllocation
@@ -11,8 +13,21 @@ from .utils import calculate_salary_for_assignment, get_assignments_salary_sum_o
 
 
 def index(request: HttpRequest):
-    projects = Project.objects.all()
-    return render(request, "projects/index.html", {"projects": projects})
+    today = timezone.now().date()
+    running_projects = Project.objects.filter(
+        Q(extension_planning_date__isnull=False, extension_planning_date__gte=today)
+        | Q(extension_planning_date__isnull=True, end_date__gte=today)
+    ).order_by("start_date", "acronym")
+
+    completed_projects = Project.objects.filter(
+        Q(extension_planning_date__isnull=False, extension_planning_date__lt=today)
+        | Q(extension_planning_date__isnull=True, end_date__lt=today)
+    ).order_by("start_date", "acronym")
+
+    return render(request, "projects/index.html", {
+        "running_projects": running_projects,
+        "completed_projects": completed_projects,
+    })
 
 
 def details(request: HttpRequest, acronym: str):

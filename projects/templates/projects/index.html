@@ -1,5 +1,30 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}Projekte{% endblock %}
+{% block heading %}Projekte{% endblock %}
+
+{% block content %}
+<h2 class="mt-3">Laufende Projekte</h2>
 <ul>
-{% for project in projects %}
-    <li><a href="/projects/details/{{ project.acronym }}/">{{ project.acronym }}</a></li>
+{% for project in running_projects %}
+    <li>
+        <a href="{% url 'projects:details' project.acronym %}">{{ project.acronym }}</a>
+        ({{ project.start_date }} - {% if project.extension_planning_date %}{{ project.extension_planning_date }}{% else %}{{ project.end_date }}{% endif %})
+    </li>
+{% empty %}
+    <li>Keine laufenden Projekte.</li>
 {% endfor %}
 </ul>
+
+<h2 class="mt-4">Abgeschlossene Projekte</h2>
+<ul>
+{% for project in completed_projects %}
+    <li>
+        <a href="{% url 'projects:details' project.acronym %}">{{ project.acronym }}</a>
+        ({{ project.start_date }} - {% if project.extension_planning_date %}{{ project.extension_planning_date }}{% else %}{{ project.end_date }}{% endif %})
+    </li>
+{% empty %}
+    <li>Keine abgeschlossenen Projekte.</li>
+{% endfor %}
+</ul>
+{% endblock %}
