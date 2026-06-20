@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 EmploymentCategories = {
     'student': 'Studentische Hilfskraft',
@@ -19,6 +20,33 @@ class Project(models.Model):
 
     def get_years(self):
         return [str(i) for i in range(self.start_date.year, self.end_date.year + 1)]
+
+
+class Institute(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    short_name = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return self.short_name
+
+
+class Landesstelle(models.Model):
+    title = models.CharField(max_length=200)
+    institute = models.ForeignKey(Institute, on_delete=models.PROTECT, null=True, blank=True)
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    start_date = models.DateField()
+    end_date = models.DateField(blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        institute_str = f" ({self.institute.short_name})" if self.institute_id else ""
+        if self.end_date:
+            return f"{self.title}{institute_str} {self.percentage}% ({self.start_date} - {self.end_date})"
+        return f"{self.title}{institute_str} {self.percentage}% (ab {self.start_date})"
 
 class StaffBudgetItem(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)

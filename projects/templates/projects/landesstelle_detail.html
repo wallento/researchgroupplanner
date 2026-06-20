@@ -1,0 +1,109 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}{{ landesstelle.title }}{% endblock %}
+{% block heading %}{{ landesstelle.title }}{% endblock %}
+
+{% block content %}
+
+<table class="table table-bordered mt-3">
+    <tr>
+        <th>Institut:</th>
+        <td>{% if landesstelle.institute %}{{ landesstelle.institute.name }} ({{ landesstelle.institute.short_name }}){% else %}–{% endif %}</td>
+    </tr>
+    <tr>
+        <th>Wertigkeit:</th>
+        <td>{{ landesstelle.percentage }} %</td>
+    </tr>
+    <tr>
+        <th>Laufzeit:</th>
+        <td>
+            {{ landesstelle.start_date }}
+            {% if landesstelle.end_date %} – {{ landesstelle.end_date }}{% else %} (laufend){% endif %}
+        </td>
+    </tr>
+    {% if landesstelle.notes %}
+    <tr>
+        <th>Notizen:</th>
+        <td>{{ landesstelle.notes }}</td>
+    </tr>
+    {% endif %}
+</table>
+
+<h2>Staffing</h2>
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+    google.charts.load('current', {'packages':['timeline']});
+    google.charts.setOnLoadCallback(drawChart);
+
+    function drawChart() {
+        var container = document.getElementById('timeline');
+        var chart = new google.visualization.Timeline(container);
+        var dataTable = new google.visualization.DataTable();
+
+        dataTable.addColumn({ type: 'string', id: 'Mitarbeiter' });
+        dataTable.addColumn({ type: 'string', id: 'Anteil' });
+        dataTable.addColumn({ type: 'string', role: 'tooltip' });
+        dataTable.addColumn({ type: 'date', id: 'Start' });
+        dataTable.addColumn({ type: 'date', id: 'End' });
+
+    {% for alloc in allocations %}
+        var startDate = new Date({{ alloc.start_date|date:"Y" }}, {{ alloc.start_date|date:"n" }} - 1, {{ alloc.start_date|date:"j" }});
+        var endDate = new Date({% if alloc.end_date %}{{ alloc.end_date|date:"Y" }}, {{ alloc.end_date|date:"n" }} - 1, {{ alloc.end_date|date:"j" }}{% else %}2099, 11, 31{% endif %});
+
+        // Google Timeline requires end > start.
+        if (endDate <= startDate) {
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 1);
+        }
+
+        dataTable.addRow([
+            '{{ alloc.employment.staff_member }}',
+            '{{ alloc.percentage }}%',
+            '{{ alloc.percentage }}%',
+            startDate,
+            endDate,
+        ]);
+    {% endfor %}
+
+        var rowCount = dataTable.getNumberOfRows();
+        container.style.height = (rowCount * 45 + 47) + 'px';
+
+        var options = {
+            timeline: { showRowLabels: true, showBarLabels: true },
+            hAxis: { format: 'MMM yyyy' }
+        };
+
+        chart.draw(dataTable, options);
+    }
+</script>
+<div id="timeline" style="height: 200px;"></div>
+
+<h2>Mitarbeiterzuordnungen</h2>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Mitarbeiter</th>
+            <th>Anteil</th>
+            <th>Von</th>
+            <th>Bis</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for alloc in allocations %}
+        <tr>
+            <td>
+                <a href="{% url 'staffing:details' alloc.employment.staff_member.id %}">
+                    {{ alloc.employment.staff_member }}
+                </a>
+            </td>
+            <td>{{ alloc.percentage }} %</td>
+            <td>{{ alloc.start_date }}</td>
+            <td>{% if alloc.end_date %}{{ alloc.end_date }}{% else %}laufend{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">Keine Mitarbeiter zugeordnet.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

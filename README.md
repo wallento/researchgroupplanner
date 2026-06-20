@@ -58,4 +58,18 @@ services:
 
 ```
 
+You can generate a production secret key for `DJANGO_SECRET_KEY` like this:
+
+```shell
+openssl rand -base64 48
+```
+
+After the first deployment, you still need to create a Django admin user once:
+
+```shell
+docker compose exec web python manage.py createsuperuser
+```
+
+The user is stored in the database and does not need to be recreated on every restart.
+
 The image is published to GitHub Container Registry via the workflow in `.github/workflows/docker-publish.yml`.

@@ -82,7 +82,7 @@
         // Example data: [Employee, Project, Start, End]
         dataTable.addRows([
 {% for assignment in timeline_assignments %}
-            [ '{{ assignment.employee }}', '{{ assignment.category }}', '{{ assignment.category }}', new Date("{{ assignment.start.isoformat }}"), new Date("{{ assignment.end.isoformat }}") ],
+            [ '{{ assignment.employee }}', '{{ assignment.category }}', '{{ assignment.category }}', new Date({{ assignment.start|date:"Y" }}, {{ assignment.start|date:"n" }} - 1, {{ assignment.start|date:"j" }}), new Date({{ assignment.end|date:"Y" }}, {{ assignment.end|date:"n" }} - 1, {{ assignment.end|date:"j" }}) ],
 {% endfor %}
         ]);
         // Dynamically set chart height based on number of rows

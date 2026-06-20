@@ -1,7 +1,16 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import OtherBudgetItem, OtherBudgetItemTransaction, OverheadBudgetItem, Project, StaffBudgetItem, StaffBudgetItemEligibility
+from .models import (
+    Institute,
+    Landesstelle,
+    OtherBudgetItem,
+    OtherBudgetItemTransaction,
+    OverheadBudgetItem,
+    Project,
+    StaffBudgetItem,
+    StaffBudgetItemEligibility,
+)
 
 class StaffBudgetItemInlineAdmin(admin.StackedInline):
     model = StaffBudgetItem
@@ -15,10 +24,13 @@ class OtherBudgetItemInlineAdmin(admin.StackedInline):
     model = OtherBudgetItem
     extra = 0
 
+
 class ProjectAdmin(admin.ModelAdmin):
     inlines = [StaffBudgetItemInlineAdmin, OverheadBudgetItemInlineAdmin, OtherBudgetItemInlineAdmin]
 
 admin.site.register(Project, ProjectAdmin)
+admin.site.register(Institute)
+admin.site.register(Landesstelle)
 
 class StaffBudgetItemEligibilityAdmin(admin.StackedInline):
     model = StaffBudgetItemEligibility

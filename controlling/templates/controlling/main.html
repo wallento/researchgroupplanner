@@ -61,7 +61,7 @@
         // Example data: [Employee, Project, Start, End]
         dataTable.addRows([
 {% for project in projects %}
-            [ '{{ project.acronym }}', new Date("{{ project.start_date.isoformat }}"), new Date("{{ project.end_date.isoformat }}") ],
+            [ '{{ project.acronym }}', new Date({{ project.start_date|date:"Y" }}, {{ project.start_date|date:"n" }} - 1, {{ project.start_date|date:"j" }}), new Date({{ project.end_date|date:"Y" }}, {{ project.end_date|date:"n" }} - 1, {{ project.end_date|date:"j" }}) ],
 {% endfor %}
         ]);
         // Dynamically set chart height based on number of rows
@@ -81,6 +81,33 @@
     }
 </script>
 <div id="timeline_projects" style="height: 500px;"></div>
+
+<h2 class="mt-2">Landesstellen</h2>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col"></th>
+            <th scope="col">Institut</th>
+            <th scope="col">Wertigkeit</th>
+            <th scope="col">Ab</th>
+            <th scope="col">Bis</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for ls in landesstellen %}
+            <tr>
+                <th scope="row"><a href="{% url 'projects:landesstelle_detail' ls.id %}">{{ ls.title }}</a></th>
+                <td>{% if ls.institute %}{{ ls.institute.short_name }}{% else %}–{% endif %}</td>
+                <td>{{ ls.percentage }} %</td>
+                <td>{{ ls.start_date }}</td>
+                <td>{% if ls.end_date %}{{ ls.end_date }}{% else %}laufend{% endif %}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5">Keine Landesstellen hinterlegt.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
 
 <h2 class="mt-2">Jahresscheiben</h2>
 
@@ -105,18 +132,113 @@
 
 <h2 class="mt-2">Mitarbeitende</h2>
 
-<table>
-    <thead>
-        <tr>
-            <td>Name</td>
-        </tr>
-    </thead>
-    <tbody>
-        {% for staff in staff_list %}
-            <tr>
-                <td><a href="{% url 'staffing:details' staff.id %}">{{ staff }}</a></td>
-            </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<script type="text/javascript">
+    google.charts.setOnLoadCallback(drawStaffTimeline);
+
+    function drawStaffTimeline() {
+        var container = document.getElementById('timeline_staff');
+        var chart = new google.visualization.Timeline(container);
+        var dataTable = new google.visualization.DataTable();
+        var rowLinks = [];
+        var colorKeys = [];
+        var colorMap = {};
+        var rowLabels = {};
+
+        function percentageToColor(percentage) {
+            var p = Math.max(0, Math.min(100, Number(percentage) || 0));
+            var t = p / 100;
+            var start = { r: 176, g: 220, b: 255 }; // light blue
+            var end = { r: 47, g: 111, b: 238 }; // blue
+            var r = Math.round(start.r + (end.r - start.r) * t);
+            var g = Math.round(start.g + (end.g - start.g) * t);
+            var b = Math.round(start.b + (end.b - start.b) * t);
+            function toHex(value) {
+                var hex = value.toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            }
+            return '#' + toHex(r) + toHex(g) + toHex(b);
+        }
+
+        dataTable.addColumn({ type: 'string', id: 'Mitarbeiter' });
+        dataTable.addColumn({ type: 'string', id: 'Anteil' });
+        dataTable.addColumn({ type: 'string', role: 'tooltip', p: { html: true } });
+        dataTable.addColumn({ type: 'date', id: 'Start' });
+        dataTable.addColumn({ type: 'date', id: 'End' });
+
+{% for row in staff_timeline_entries %}
+        var startDate = new Date({{ row.start|date:"Y" }}, {{ row.start|date:"n" }} - 1, {{ row.start|date:"j" }});
+        var endDate = new Date({{ row.end|date:"Y" }}, {{ row.end|date:"n" }} - 1, {{ row.end|date:"j" }});
+        if (endDate <= startDate) {
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 1);
+        }
+
+        var percentageValue = Number('{{ row.percentage }}');
+        if (isNaN(percentageValue)) {
+            percentageValue = parseFloat('{{ row.percentage }}'.replace(',', '.'));
+        }
+        if (isNaN(percentageValue)) {
+            percentageValue = 0;
+        }
+
+        var colorKey = percentageValue.toFixed(2) + '%';
+        if (!colorMap[colorKey]) {
+            colorMap[colorKey] = percentageValue;
+            colorKeys.push(colorKey);
+        }
+
+        dataTable.addRow([
+            '{{ row.staff|escapejs }}',
+            colorKey,
+            '{{ row.tooltip_html|escapejs }}',
+            startDate,
+            endDate,
+        ]);
+        rowLinks.push('{% url "staffing:details" row.staff_id %}');
+        rowLabels['{{ row.staff|escapejs }}'] = true;
+{% endfor %}
+
+        var rowCount = dataTable.getNumberOfRows();
+        var staffCount = Object.keys(rowLabels).length;
+        var chartHeight = (Math.max(staffCount, 1) * 46 + 90);
+        container.style.height = chartHeight + 'px';
+        container.style.overflow = 'hidden';
+
+        if (rowCount === 0) {
+            container.innerHTML = '<p>Keine Vertrags- oder Zuordnungsdaten vorhanden.</p>';
+            return;
+        }
+
+        var colors = colorKeys.map(function (key) {
+            return percentageToColor(colorMap[key]);
+        });
+
+        var options = {
+            timeline: { showRowLabels: true, showBarLabels: true, colorByRowLabel: false },
+            tooltip: { isHtml: true },
+            colors: colors,
+            height: chartHeight,
+            hAxis: {
+                format: 'MMM yyyy',
+                minorGridlines: { count: 12 },
+                majorGridlines: { count: 2 },
+            },
+        };
+
+        chart.draw(dataTable, options);
+
+        google.visualization.events.addListener(chart, 'select', function () {
+            var sel = chart.getSelection();
+            if (!sel || sel.length === 0 || sel[0].row == null) {
+                return;
+            }
+            var target = rowLinks[sel[0].row];
+            if (target) {
+                window.location.href = target;
+            }
+        });
+    }
+</script>
+
+<div id="timeline_staff"></div>
 {% endblock %}

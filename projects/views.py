@@ -1,8 +1,8 @@
 from decimal import Decimal
 from controlling.utils import render
 
-from .models import StaffBudgetItem, Project
-from staffing.models import StaffAssignment
+from .models import Landesstelle, StaffBudgetItem, Project
+from staffing.models import StaffAssignment, StaffFundingAllocation
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
 
@@ -67,3 +67,14 @@ def staff_budget_item(request: HttpRequest, acronym: str, id: int):
 
     # Render the budget item details
     return render(request, "projects/staff_budget_item.html", {"project": project, "budget_item": budget_item})
+
+
+def landesstelle_detail(request: HttpRequest, id: int):
+    landesstelle = get_object_or_404(Landesstelle, id=id)
+    allocations = StaffFundingAllocation.objects.filter(landesstelle=landesstelle).select_related(
+        "employment__staff_member"
+    ).order_by("start_date")
+    return render(request, "projects/landesstelle_detail.html", {
+        "landesstelle": landesstelle,
+        "allocations": allocations,
+    })

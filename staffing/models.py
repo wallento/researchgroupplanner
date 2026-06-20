@@ -1,6 +1,8 @@
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 
-from projects.models import Project, EmploymentCategories, StaffBudgetItem
+from projects.models import EmploymentCategories, Landesstelle, StaffBudgetItem
 
 # Create your models here.
 class StaffMember(models.Model):
@@ -48,3 +50,30 @@ class StaffAssignment(models.Model):
 
     def __str__(self):
         return f"{self.employment.staff_member} - ({self.start_date} - {self.end_date}) in {self.budget_item}"
+
+
+class StaffFundingAllocation(models.Model):
+    employment = models.ForeignKey(Employment, on_delete=models.CASCADE)
+    budget_item = models.ForeignKey(StaffBudgetItem, on_delete=models.CASCADE, null=True, blank=True)
+    landesstelle = models.ForeignKey(Landesstelle, on_delete=models.CASCADE, null=True, blank=True)
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+
+    def clean(self):
+        super().clean()
+        if (self.budget_item is None) == (self.landesstelle is None):
+            raise ValidationError("Bitte genau eine Finanzierungsquelle angeben: Projektbudget oder Landesstelle.")
+        if self.end_date and self.end_date < self.start_date:
+            raise ValidationError("Das Enddatum darf nicht vor dem Startdatum liegen.")
+
+    def source(self):
+        return self.budget_item if self.budget_item else self.landesstelle
+
+    def __str__(self):
+        end_date = self.end_date if self.end_date else "offen"
+        return f"{self.employment.staff_member} - {self.percentage}% ({self.start_date} - {end_date}) in {self.source()}"
