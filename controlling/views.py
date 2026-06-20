@@ -8,9 +8,7 @@ from django.utils import timezone
 from django.db.models import Q
 from django.db.models import Sum
 
-from projects.checks import full_checks as projects_full_checks
 from projects.utils import calculate_salary_for_assignment
-from staffing.checks import full_checks as staffing_full_checks
 
 
 def _month_iter(start_date, end_date):
@@ -50,6 +48,34 @@ def warnings(request):
     # 2) Budget checks on total project level.
     projects = Project.objects.all()
     for project in projects:
+        staff_budget_sum = project.staffbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        other_budget_sum = project.otherbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        overhead_budget_sum = project.overheadbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        planned_total = staff_budget_sum + other_budget_sum + overhead_budget_sum
+
+        if planned_total != project.budget_total:
+            diff = (planned_total - project.budget_total).quantize(Decimal("0.01"))
+            warnings_list.append({
+                "severity": "warning",
+                "title": f"Budgetsumme ungleich Fördersumme: {project.acronym}",
+                "detail": (
+                    f"Einzelsummen ergeben {planned_total} EUR, Fördersumme ist {project.budget_total} EUR "
+                    f"(Differenz: {diff} EUR)."
+                ),
+                "link": f"/projects/details/{project.acronym}/",
+            })
+
+        has_personnel_allocation = StaffFundingAllocation.objects.filter(
+            budget_item__project=project
+        ).exists()
+        if not has_personnel_allocation:
+            warnings_list.append({
+                "severity": "warning",
+                "title": f"Keine Personalallokation im Projekt: {project.acronym}",
+                "detail": "Es wurde noch kein Personalanteil auf Projekt-Personalbudgets allokiert.",
+                "link": f"/projects/details/{project.acronym}/",
+            })
+
         staff_sum = Decimal("0.00")
         for assignment in StaffAssignment.objects.filter(budget_item__project=project):
             staff_sum += calculate_salary_for_assignment(assignment).salary_sum
@@ -295,9 +321,6 @@ def statistics(request):
 
 # Create your views here.
 def main(request):
-    projects_full_checks(request)
-    staffing_full_checks(request)
-
     today = timezone.now().date()
     projects = Project.objects.filter(
         Q(extension_planning_date__isnull=False, extension_planning_date__gt=today)
