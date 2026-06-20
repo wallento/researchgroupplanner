@@ -1,4 +1,5 @@
 {% extends "controlling/base.html" %}
+{% load static %}
 
 {% block title %}Statistik{% endblock %}
 {% block heading %}Statistik{% endblock %}
@@ -21,7 +22,7 @@
 {{ statistics_yearly_values|json_script:"stats-yearly-values" }}
 {{ statistics_cumulative_values|json_script:"stats-cumulative-values" }}
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
 <script>
     (function () {
         var years = JSON.parse(document.getElementById('stats-years').textContent);

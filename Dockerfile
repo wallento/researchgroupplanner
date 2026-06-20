@@ -1,3 +1,13 @@
+FROM node:20-alpine AS frontend-assets
+
+WORKDIR /assets
+
+COPY package.json package-lock.json /assets/
+COPY tools /assets/tools
+
+RUN npm ci && npm run build:assets
+
+
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,6 +21,7 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
+COPY --from=frontend-assets /assets/controlling/static/vendor /app/controlling/static/vendor
 
 EXPOSE 8000
 

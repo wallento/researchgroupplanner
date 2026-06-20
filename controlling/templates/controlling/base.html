@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <title>{% block title %}GroupPlanning{% endblock %}</title>
 
-    {% bootstrap_css %}
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
 
     <style>
         :root {
@@ -117,6 +117,6 @@
 
     </div>
 
-    {% bootstrap_javascript %}
+    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
 </body>
 </html>

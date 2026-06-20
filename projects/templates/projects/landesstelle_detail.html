@@ -1,4 +1,5 @@
 {% extends "controlling/base.html" %}
+{% load static %}
 
 {% block title %}{{ landesstelle.title }}{% endblock %}
 {% block heading %}{{ landesstelle.title }}{% endblock %}
@@ -30,8 +31,8 @@
 </table>
 
 <h2>Staffing</h2>
-<link rel="stylesheet" href="https://unpkg.com/vis-timeline@7.7.3/styles/vis-timeline-graph2d.min.css">
-<script src="https://unpkg.com/vis-timeline@7.7.3/standalone/umd/vis-timeline-graph2d.min.js"></script>
+<link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
+<script src="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.js' %}"></script>
 
 <style>
     .timeline-scroll {

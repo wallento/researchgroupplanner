@@ -14,6 +14,19 @@ direnv allow
 uv pip install -r requirements.txt
 ```
 
+## Frontend assets (lokal, ohne CDN)
+
+Die JavaScript/CSS-Abhaengigkeiten werden via npm installiert und in
+`controlling/static/vendor/` bereitgestellt.
+
+```shell
+npm install
+npm run build:assets
+```
+
+Dieser Schritt sollte nach einem Update der Frontend-Abhaengigkeiten erneut
+ausgefuehrt werden.
+
 Then we setup Django
 
 ``` shell
@@ -38,6 +51,10 @@ python manage.py runserver
 Go to http://localhost:8000/admin
 
 # Docker
+
+Der Docker-Build erzeugt die Frontend-Assets automatisch ueber einen
+Multi-Stage-Build (Node-Stage + Python-Stage). Es ist kein manueller
+CDN-Zugriff zur Laufzeit notwendig.
 
 Example for a `docker-compose.yml` behind Traefik:
 
