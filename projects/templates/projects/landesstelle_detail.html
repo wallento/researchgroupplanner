@@ -30,53 +30,173 @@
 </table>
 
 <h2>Staffing</h2>
-<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/vis-timeline@7.7.3/styles/vis-timeline-graph2d.min.css">
+<script src="https://unpkg.com/vis-timeline@7.7.3/standalone/umd/vis-timeline-graph2d.min.js"></script>
+
+<style>
+    .timeline-scroll {
+        border: 1px solid #d6d6d6;
+        border-radius: 8px;
+        background: #fff;
+        overflow-x: hidden;
+        overflow-y: visible;
+        box-sizing: border-box;
+        margin-bottom: 1rem;
+    }
+
+    .timeline-shell {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        min-width: 100%;
+        min-height: 0;
+    }
+
+    .timeline-shell .vis-timeline {
+        border: 0;
+    }
+
+    .vis-time-axis .vis-text {
+        font-size: 0.75rem;
+    }
+
+    .vis-tooltip {
+        z-index: 2000;
+        max-height: none;
+        overflow: visible;
+    }
+</style>
+
 <script type="text/javascript">
-    google.charts.load('current', {'packages':['timeline']});
-    google.charts.setOnLoadCallback(drawChart);
+    function gpBuildDate(year, month, day) {
+        return new Date(year, month - 1, day);
+    }
 
-    function drawChart() {
+    function gpMonthSpan(start, end) {
+        return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    }
+
+    function gpTimelineRange(items) {
+        var min = null;
+        var max = null;
+        for (var i = 0; i < items.length; i++) {
+            var start = new Date(items[i].start);
+            var end = new Date(items[i].end);
+            if (!min || start < min) min = start;
+            if (!max || end > max) max = end;
+        }
+        return { min: min, max: max };
+    }
+
+    function gpBuildWindow(range) {
+        var now = new Date();
+        var desiredStart = new Date(now.getFullYear() - 3, 0, 1);
+        var desiredEnd = new Date(now.getFullYear() + 3, 11, 31);
+        var min = new Date(range.min.getFullYear(), range.min.getMonth() - 3, 1);
+        var max = new Date(range.max.getFullYear(), range.max.getMonth() + 4, 0);
+        if (desiredStart < min) min = new Date(desiredStart);
+        if (desiredEnd > max) max = new Date(desiredEnd);
+        var start = new Date(desiredStart);
+        var end = new Date(desiredEnd);
+        if (start < min) start = new Date(min);
+        if (end > max) end = new Date(max);
+        if (start >= end) {
+            start = new Date(min);
+            end = new Date(max);
+        }
+        return { start: start, end: end, min: min, max: max };
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
         var container = document.getElementById('timeline');
-        var chart = new google.visualization.Timeline(container);
-        var dataTable = new google.visualization.DataTable();
+        if (!window.vis || !vis.Timeline) {
+            container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
+            return;
+        }
+        var groups = [];
+        var items = [];
+        var existingGroups = {};
 
-        dataTable.addColumn({ type: 'string', id: 'Mitarbeiter' });
-        dataTable.addColumn({ type: 'string', id: 'Anteil' });
-        dataTable.addColumn({ type: 'string', role: 'tooltip' });
-        dataTable.addColumn({ type: 'date', id: 'Start' });
-        dataTable.addColumn({ type: 'date', id: 'End' });
+{% for alloc in allocations %}
+        var groupKey = '{{ alloc.employment.staff_member|escapejs }}';
+        var groupId = existingGroups[groupKey];
+        if (!groupId) {
+            groupId = 'staff_{{ forloop.counter0 }}';
+            existingGroups[groupKey] = groupId;
+            groups.push({ id: groupId, content: groupKey });
+        }
 
-    {% for alloc in allocations %}
-        var startDate = new Date({{ alloc.start_date|date:"Y" }}, {{ alloc.start_date|date:"n" }} - 1, {{ alloc.start_date|date:"j" }});
-        var endDate = new Date({% if alloc.end_date %}{{ alloc.end_date|date:"Y" }}, {{ alloc.end_date|date:"n" }} - 1, {{ alloc.end_date|date:"j" }}{% else %}2099, 11, 31{% endif %});
+        var startDate = gpBuildDate({{ alloc.start_date|date:"Y" }}, {{ alloc.start_date|date:"n" }}, {{ alloc.start_date|date:"j" }});
+        var endDate = gpBuildDate({% if alloc.end_date %}{{ alloc.end_date|date:"Y" }}, {{ alloc.end_date|date:"n" }}, {{ alloc.end_date|date:"j" }}{% else %}2099, 12, 31{% endif %});
 
-        // Google Timeline requires end > start.
         if (endDate <= startDate) {
             endDate = new Date(startDate);
             endDate.setDate(endDate.getDate() + 1);
         }
 
-        dataTable.addRow([
-            '{{ alloc.employment.staff_member }}',
-            '{{ alloc.percentage }}%',
-            '{{ alloc.percentage }}%',
-            startDate,
-            endDate,
-        ]);
-    {% endfor %}
+        items.push({
+            id: 'allocation_{{ forloop.counter0 }}',
+            group: groupId,
+            content: '{{ alloc.percentage }}%',
+            title: '<strong>' + groupKey + '</strong><br>{{ alloc.percentage }}%<br>{{ alloc.start_date }} - {% if alloc.end_date %}{{ alloc.end_date }}{% else %}laufend{% endif %}',
+            start: startDate,
+            end: endDate
+        });
+{% endfor %}
 
-        var rowCount = dataTable.getNumberOfRows();
-        container.style.height = (rowCount * 45 + 47) + 'px';
+        if (!items.length) {
+            container.innerHTML = '<p class="m-3">Keine Mitarbeiterzuordnungen vorhanden.</p>';
+            return;
+        }
 
-        var options = {
-            timeline: { showRowLabels: true, showBarLabels: true },
-            hAxis: { format: 'MMM yyyy' }
-        };
+        var range = gpTimelineRange(items);
+        var windowRange = gpBuildWindow(range);
+        var monthSpan = gpMonthSpan(windowRange.min, windowRange.max);
+        container.style.minWidth = '100%';
+        container.style.height = 'auto';
 
-        chart.draw(dataTable, options);
-    }
+        if (window.vis && vis.moment && !window.__gpSingleLetterMonthsConfigured) {
+            vis.moment.updateLocale('de', {
+                monthsShort: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
+            });
+            window.__gpSingleLetterMonthsConfigured = true;
+        }
+
+        new vis.Timeline(container, items, groups, {
+            stack: false,
+            min: windowRange.min,
+            max: windowRange.max,
+            start: windowRange.start,
+            end: windowRange.end,
+            zoomable: true,
+            moveable: true,
+            horizontalScroll: true,
+            verticalScroll: false,
+            showCurrentTime: true,
+            zoomKey: 'ctrlKey',
+            margin: { item: { horizontal: 4, vertical: 6 }, axis: 6 },
+            groupHeightMode: 'fitItems',
+            autoResize: true,
+            height: null,
+            minHeight: 0,
+            orientation: { axis: 'bottom' },
+            locale: 'de',
+            timeAxis: { scale: 'month', step: 1 },
+            format: {
+                minorLabels: {
+                    month: 'MMM',
+                },
+                majorLabels: {
+                    month: 'YYYY',
+                },
+            },
+            tooltip: { followMouse: false, overflowMethod: 'flip' },
+        });
+    });
 </script>
-<div id="timeline" style="height: 200px;"></div>
+<div id="timeline_scroll" class="timeline-scroll">
+    <div id="timeline" class="timeline-shell"></div>
+</div>
 
 <h2>Mitarbeiterzuordnungen</h2>
 <table class="table table-bordered">

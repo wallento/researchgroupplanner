@@ -44,43 +44,409 @@
     </tbody>
 </table>
 
-<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/vis-timeline@7.7.3/styles/vis-timeline-graph2d.min.css">
+<script src="https://unpkg.com/vis-timeline@7.7.3/standalone/umd/vis-timeline-graph2d.min.js"></script>
+
+<style>
+    .timeline-scroll {
+        border: 1px solid #d6d6d6;
+        border-radius: 8px;
+        background: #fff;
+        overflow-x: hidden;
+        overflow-y: visible;
+        box-sizing: border-box;
+        margin-bottom: 1rem;
+    }
+
+    .timeline-shell {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        min-width: 100%;
+    }
+
+    .timeline-shell--projects {
+        min-height: 0;
+    }
+
+    .timeline-shell--staff {
+        min-height: 0;
+    }
+
+    .vis-timeline {
+        border: 0;
+    }
+
+    .vis-item {
+        border-width: 1px;
+        border-radius: 5px;
+        font-size: 0.85rem;
+    }
+
+    .vis-labelset .vis-label {
+        border-right: 1px solid #ddd;
+        font-weight: 600;
+        background: #fff;
+    }
+
+    .vis-time-axis .vis-text.vis-major {
+        font-weight: 700;
+    }
+
+    .vis-time-axis .vis-text {
+        font-size: 0.75rem;
+    }
+
+    .vis-tooltip {
+        z-index: 2000;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .gp-floating-tooltip {
+        position: fixed;
+        z-index: 4000;
+        display: none;
+        max-width: 560px;
+        padding: 0.65rem 0.8rem;
+        background: #f6f5ef;
+        border: 1px solid #8f8d85;
+        border-radius: 6px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+        color: #111;
+        line-height: 1.35;
+        pointer-events: none;
+        white-space: normal;
+    }
+</style>
+
 <script type="text/javascript">
-    google.charts.load('current', {'packages':['timeline']});
-    google.charts.setOnLoadCallback(drawChart);
+    function gpBuildDate(year, month, day) {
+        return new Date(year, month - 1, day);
+    }
 
-    function drawChart() {
+    function gpMonthSpan(start, end) {
+        return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    }
+
+    function gpTimelineRange(items) {
+        var min = null;
+        var max = null;
+        for (var i = 0; i < items.length; i++) {
+            var start = new Date(items[i].start);
+            var end = new Date(items[i].end);
+            if (!min || start < min) min = start;
+            if (!max || end > max) max = end;
+        }
+        return { min: min, max: max };
+    }
+
+    function gpBuildWindow(range) {
+        var now = new Date();
+        var desiredStart = new Date(now.getFullYear() - 3, 0, 1);
+        var desiredEnd = new Date(now.getFullYear() + 3, 11, 31);
+        var min = new Date(range.min.getFullYear(), range.min.getMonth() - 3, 1);
+        var max = new Date(range.max.getFullYear(), range.max.getMonth() + 4, 0);
+        if (desiredStart < min) min = new Date(desiredStart);
+        if (desiredEnd > max) max = new Date(desiredEnd);
+        var start = new Date(desiredStart);
+        var end = new Date(desiredEnd);
+        if (start < min) start = new Date(min);
+        if (end > max) end = new Date(max);
+        if (start >= end) {
+            start = new Date(min);
+            end = new Date(max);
+        }
+        return { start: start, end: end, min: min, max: max };
+    }
+
+    function gpPercentageColor(percentage) {
+        var p = Math.max(0, Math.min(100, Number(percentage) || 0));
+        var t = p / 100;
+        var start = { r: 176, g: 220, b: 255 };
+        var end = { r: 47, g: 111, b: 238 };
+        var r = Math.round(start.r + (end.r - start.r) * t);
+        var g = Math.round(start.g + (end.g - start.g) * t);
+        var b = Math.round(start.b + (end.b - start.b) * t);
+        return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+    }
+
+    function gpEnsureFloatingTooltip() {
+        var node = document.getElementById('gp-floating-tooltip');
+        if (!node) {
+            node = document.createElement('div');
+            node.id = 'gp-floating-tooltip';
+            node.className = 'gp-floating-tooltip';
+            document.body.appendChild(node);
+        }
+        return node;
+    }
+
+    function gpPositionFloatingTooltip(node, pageX, pageY) {
+        var offset = 14;
+        var maxX = window.innerWidth - node.offsetWidth - 8;
+        var maxY = window.innerHeight - node.offsetHeight - 8;
+        var x = Math.min(Math.max(8, pageX + offset), Math.max(8, maxX));
+        var y = pageY + offset;
+
+        if (y > maxY) {
+            y = pageY - node.offsetHeight - offset;
+        }
+        y = Math.max(8, Math.min(y, Math.max(8, maxY)));
+
+        node.style.left = x + 'px';
+        node.style.top = y + 'px';
+    }
+
+    function gpShowFloatingTooltip(html, pageX, pageY) {
+        var node = gpEnsureFloatingTooltip();
+        node.innerHTML = html;
+        node.style.display = 'block';
+        gpPositionFloatingTooltip(node, pageX, pageY);
+    }
+
+    function gpMoveFloatingTooltip(pageX, pageY) {
+        var node = document.getElementById('gp-floating-tooltip');
+        if (!node || node.style.display === 'none') {
+            return;
+        }
+        gpPositionFloatingTooltip(node, pageX, pageY);
+    }
+
+    function gpHideFloatingTooltip() {
+        var node = document.getElementById('gp-floating-tooltip');
+        if (node) {
+            node.style.display = 'none';
+        }
+    }
+
+    function gpRenderProjectTimeline() {
         var container = document.getElementById('timeline_projects');
-        var chart = new google.visualization.Timeline(container);
-        var dataTable = new google.visualization.DataTable();
+        if (!window.vis || !vis.Timeline) {
+            container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
+            return;
+        }
+        var groups = [];
+        var items = [];
 
-        dataTable.addColumn({ type: 'string', id: 'Project' });
-        dataTable.addColumn({ type: 'date', id: 'Start' });
-        dataTable.addColumn({ type: 'date', id: 'End' });
-
-        // Example data: [Employee, Project, Start, End]
-        dataTable.addRows([
 {% for project in projects %}
-            [ '{{ project.acronym }}', new Date({{ project.start_date|date:"Y" }}, {{ project.start_date|date:"n" }} - 1, {{ project.start_date|date:"j" }}), new Date({{ project.end_date|date:"Y" }}, {{ project.end_date|date:"n" }} - 1, {{ project.end_date|date:"j" }}) ],
+        groups.push({ id: 'p{{ project.id }}', content: '{{ project.acronym|escapejs }}' });
+        items.push({
+            id: 'project_{{ project.id }}',
+            group: 'p{{ project.id }}',
+            content: '{{ project.acronym|escapejs }}',
+            title: '<strong>{{ project.acronym|escapejs }}</strong><br>{{ project.start_date }} - {{ project.end_date }}',
+            start: gpBuildDate({{ project.start_date|date:"Y" }}, {{ project.start_date|date:"n" }}, {{ project.start_date|date:"j" }}),
+            end: gpBuildDate({{ project.end_date|date:"Y" }}, {{ project.end_date|date:"n" }}, {{ project.end_date|date:"j" }})
+        });
 {% endfor %}
-        ]);
-        // Dynamically set chart height based on number of rows
-        var rowCount = dataTable.getNumberOfRows();
-        container.style.height = (rowCount * 45 + 47) + 'px'; 
 
-        var options = {
-            timeline: { showRowLabels: true, showBarLabels: false },
-            hAxis: {
-                format: 'MMM yyyy',
-                minorGridlines: { count: 12 },
-                majorGridlines: { count: 2 },
-           }
-        };
+        if (!items.length) {
+            container.innerHTML = '<p class="m-3">Keine Projektdaten vorhanden.</p>';
+            return;
+        }
 
-        chart.draw(dataTable, options);
+        var range = gpTimelineRange(items);
+        var windowRange = gpBuildWindow(range);
+        var monthSpan = gpMonthSpan(windowRange.min, windowRange.max);
+        container.style.minWidth = '100%';
+        container.style.height = 'auto';
+
+        new vis.Timeline(container, items, groups, {
+            stack: false,
+            min: windowRange.min,
+            max: windowRange.max,
+            start: windowRange.start,
+            end: windowRange.end,
+            zoomable: true,
+            moveable: true,
+            horizontalScroll: true,
+            verticalScroll: false,
+            showCurrentTime: true,
+            zoomKey: 'ctrlKey',
+            margin: { item: { horizontal: 4, vertical: 6 }, axis: 6 },
+            groupHeightMode: 'fitItems',
+            autoResize: true,
+            height: null,
+            minHeight: 0,
+            orientation: { axis: 'bottom' },
+            locale: 'de',
+            timeAxis: { scale: 'month', step: 1 },
+            format: {
+                minorLabels: {
+                    month: 'MMM',
+                },
+                majorLabels: {
+                    month: 'YYYY',
+                },
+            },
+            tooltip: { followMouse: false, overflowMethod: 'flip' },
+        });
     }
 </script>
-<div id="timeline_projects" style="height: 500px;"></div>
+<div id="timeline_projects_scroll" class="timeline-scroll">
+    <div id="timeline_projects" class="timeline-shell timeline-shell--projects"></div>
+</div>
+
+<h2 class="mt-2">Mitarbeitende</h2>
+
+<script type="text/javascript">
+    function gpRenderStaffTimeline() {
+        var container = document.getElementById('timeline_staff');
+        if (!window.vis || !vis.Timeline) {
+            container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
+            return;
+        }
+        var groups = [];
+        var items = [];
+        var links = {};
+        var tooltips = {};
+        var existingGroups = {};
+
+{% for row in staff_timeline_entries %}
+        var groupId = 's{{ row.staff_id }}';
+        if (!existingGroups[groupId]) {
+            groups.push({ id: groupId, content: '{{ row.staff|escapejs }}' });
+            existingGroups[groupId] = true;
+        }
+
+        var startDate = gpBuildDate({{ row.start|date:"Y" }}, {{ row.start|date:"n" }}, {{ row.start|date:"j" }});
+        var endDate = gpBuildDate({{ row.end|date:"Y" }}, {{ row.end|date:"n" }}, {{ row.end|date:"j" }});
+        if (endDate <= startDate) {
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 1);
+        }
+
+        var percentage = Number('{{ row.percentage }}'.replace(',', '.'));
+        if (isNaN(percentage)) percentage = 0;
+
+        var itemId = 'employment_{{ forloop.counter0 }}';
+        links[itemId] = '{% url "staffing:details" row.staff_id %}';
+        tooltips[itemId] = '{{ row.tooltip_html|escapejs }}';
+
+        items.push({
+            id: itemId,
+            group: groupId,
+            content: 'Vertrag ' + percentage + '%',
+            start: startDate,
+            end: endDate,
+            style: 'background-color: ' + gpPercentageColor(percentage) + '; border-color: #4e78b4; color: #082039;'
+        });
+{% endfor %}
+
+        if (!items.length) {
+            container.innerHTML = '<p class="m-3">Keine Vertrags- oder Zuordnungsdaten vorhanden.</p>';
+            return;
+        }
+
+        var range = gpTimelineRange(items);
+        var windowRange = gpBuildWindow(range);
+        var monthSpan = gpMonthSpan(windowRange.min, windowRange.max);
+        container.style.minWidth = '100%';
+        container.style.height = 'auto';
+
+        var timeline = new vis.Timeline(container, items, groups, {
+            stack: false,
+            min: windowRange.min,
+            max: windowRange.max,
+            start: windowRange.start,
+            end: windowRange.end,
+            zoomable: true,
+            moveable: true,
+            horizontalScroll: true,
+            verticalScroll: false,
+            showCurrentTime: true,
+            zoomKey: 'ctrlKey',
+            margin: { item: { horizontal: 4, vertical: 6 }, axis: 6 },
+            groupHeightMode: 'fitItems',
+            autoResize: true,
+            height: null,
+            minHeight: 0,
+            orientation: { axis: 'bottom' },
+            locale: 'de',
+            timeAxis: { scale: 'month', step: 1 },
+            format: {
+                minorLabels: {
+                    month: 'MMM',
+                },
+                majorLabels: {
+                    month: 'YYYY',
+                },
+            },
+            showTooltips: false,
+        });
+
+        timeline.on('itemover', function (properties) {
+            var tooltipHtml = tooltips[properties.item];
+            if (!tooltipHtml || !properties.event) {
+                return;
+            }
+            gpShowFloatingTooltip(tooltipHtml, properties.event.pageX, properties.event.pageY);
+        });
+
+        timeline.on('mouseMove', function (properties) {
+            if (!properties.event) {
+                return;
+            }
+            gpMoveFloatingTooltip(properties.event.pageX, properties.event.pageY);
+        });
+
+        timeline.on('itemout', function () {
+            gpHideFloatingTooltip();
+        });
+
+        timeline.on('rangechange', function () {
+            gpHideFloatingTooltip();
+        });
+
+        timeline.on('select', function (properties) {
+            gpHideFloatingTooltip();
+            if (!properties.items || !properties.items.length) {
+                return;
+            }
+            var target = links[properties.items[0]];
+            if (target) {
+                window.location.href = target;
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.vis && vis.moment && !window.__gpSingleLetterMonthsConfigured) {
+            vis.moment.updateLocale('de', {
+                monthsShort: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
+            });
+            window.__gpSingleLetterMonthsConfigured = true;
+        }
+        gpRenderProjectTimeline();
+        gpRenderStaffTimeline();
+    });
+</script>
+
+<div id="timeline_staff_scroll" class="timeline-scroll">
+    <div id="timeline_staff" class="timeline-shell timeline-shell--staff"></div>
+</div>
+
+<h2 class="mt-2">Jahresscheiben</h2>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col"></th>
+            {% for year in budgets_per_year %}
+                <th scope="col">{{ year }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+            <tr>
+                <th scope="col">allokiert</th>
+                {% for year, data in budgets_per_year.items %}
+                    <td>€ {{ data.total }}</td>
+                {% endfor %}
+            </tr>
+    </tbody>
+</table>
 
 <h2 class="mt-2">Landesstellen</h2>
 
@@ -108,137 +474,4 @@
         {% endfor %}
     </tbody>
 </table>
-
-<h2 class="mt-2">Jahresscheiben</h2>
-
-<table class="table">
-    <thead>
-        <tr>
-            <th scope="col"></th>
-            {% for year in budgets_per_year %}
-                <th scope="col">{{ year }}</th>
-            {% endfor %}
-        </tr>
-    </thead>
-    <tbody>
-            <tr>
-                <th scope="col">allokiert</th>
-                {% for year, data in budgets_per_year.items %}
-                    <td>€ {{ data.total }}</td>
-                {% endfor %}
-            </tr>
-    </tbody>
-</table>
-
-<h2 class="mt-2">Mitarbeitende</h2>
-
-<script type="text/javascript">
-    google.charts.setOnLoadCallback(drawStaffTimeline);
-
-    function drawStaffTimeline() {
-        var container = document.getElementById('timeline_staff');
-        var chart = new google.visualization.Timeline(container);
-        var dataTable = new google.visualization.DataTable();
-        var rowLinks = [];
-        var colorKeys = [];
-        var colorMap = {};
-        var rowLabels = {};
-
-        function percentageToColor(percentage) {
-            var p = Math.max(0, Math.min(100, Number(percentage) || 0));
-            var t = p / 100;
-            var start = { r: 176, g: 220, b: 255 }; // light blue
-            var end = { r: 47, g: 111, b: 238 }; // blue
-            var r = Math.round(start.r + (end.r - start.r) * t);
-            var g = Math.round(start.g + (end.g - start.g) * t);
-            var b = Math.round(start.b + (end.b - start.b) * t);
-            function toHex(value) {
-                var hex = value.toString(16);
-                return hex.length === 1 ? '0' + hex : hex;
-            }
-            return '#' + toHex(r) + toHex(g) + toHex(b);
-        }
-
-        dataTable.addColumn({ type: 'string', id: 'Mitarbeiter' });
-        dataTable.addColumn({ type: 'string', id: 'Anteil' });
-        dataTable.addColumn({ type: 'string', role: 'tooltip', p: { html: true } });
-        dataTable.addColumn({ type: 'date', id: 'Start' });
-        dataTable.addColumn({ type: 'date', id: 'End' });
-
-{% for row in staff_timeline_entries %}
-        var startDate = new Date({{ row.start|date:"Y" }}, {{ row.start|date:"n" }} - 1, {{ row.start|date:"j" }});
-        var endDate = new Date({{ row.end|date:"Y" }}, {{ row.end|date:"n" }} - 1, {{ row.end|date:"j" }});
-        if (endDate <= startDate) {
-            endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 1);
-        }
-
-        var percentageValue = Number('{{ row.percentage }}');
-        if (isNaN(percentageValue)) {
-            percentageValue = parseFloat('{{ row.percentage }}'.replace(',', '.'));
-        }
-        if (isNaN(percentageValue)) {
-            percentageValue = 0;
-        }
-
-        var colorKey = percentageValue.toFixed(2) + '%';
-        if (!colorMap[colorKey]) {
-            colorMap[colorKey] = percentageValue;
-            colorKeys.push(colorKey);
-        }
-
-        dataTable.addRow([
-            '{{ row.staff|escapejs }}',
-            colorKey,
-            '{{ row.tooltip_html|escapejs }}',
-            startDate,
-            endDate,
-        ]);
-        rowLinks.push('{% url "staffing:details" row.staff_id %}');
-        rowLabels['{{ row.staff|escapejs }}'] = true;
-{% endfor %}
-
-        var rowCount = dataTable.getNumberOfRows();
-        var staffCount = Object.keys(rowLabels).length;
-        var chartHeight = (Math.max(staffCount, 1) * 46 + 90);
-        container.style.height = chartHeight + 'px';
-        container.style.overflow = 'hidden';
-
-        if (rowCount === 0) {
-            container.innerHTML = '<p>Keine Vertrags- oder Zuordnungsdaten vorhanden.</p>';
-            return;
-        }
-
-        var colors = colorKeys.map(function (key) {
-            return percentageToColor(colorMap[key]);
-        });
-
-        var options = {
-            timeline: { showRowLabels: true, showBarLabels: true, colorByRowLabel: false },
-            tooltip: { isHtml: true },
-            colors: colors,
-            height: chartHeight,
-            hAxis: {
-                format: 'MMM yyyy',
-                minorGridlines: { count: 12 },
-                majorGridlines: { count: 2 },
-            },
-        };
-
-        chart.draw(dataTable, options);
-
-        google.visualization.events.addListener(chart, 'select', function () {
-            var sel = chart.getSelection();
-            if (!sel || sel.length === 0 || sel[0].row == null) {
-                return;
-            }
-            var target = rowLinks[sel[0].row];
-            if (target) {
-                window.location.href = target;
-            }
-        });
-    }
-</script>
-
-<div id="timeline_staff"></div>
 {% endblock %}
