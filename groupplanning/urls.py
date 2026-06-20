@@ -18,10 +18,11 @@ from django.contrib import admin
 from django.conf import settings
 from django.urls import include, path
 
-from controlling.views import main as controlling_main
+from controlling.views import main as controlling_main, warnings as controlling_warnings
 
 urlpatterns = [
     path("", controlling_main, name="main"),
+    path("warnings/", controlling_warnings, name="warnings"),
     path("staffing/", include("staffing.urls")),
     path("projects/", include("projects.urls")),
     path("admin/", admin.site.urls),

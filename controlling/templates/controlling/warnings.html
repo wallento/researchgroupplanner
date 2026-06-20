@@ -1,0 +1,31 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}Warnungen{% endblock %}
+{% block heading %}Warnungen{% endblock %}
+
+{% block content %}
+<p class="text-muted">Diese Seite listet automatische Konsistenzchecks für Projekte, Verträge und Zuordnungen.</p>
+
+{% if warnings_list %}
+    <div class="list-group mb-4">
+        {% for warning in warnings_list %}
+            <div class="list-group-item list-group-item-{% if warning.severity == 'danger' %}danger{% elif warning.severity == 'warning' %}warning{% elif warning.severity == 'success' %}success{% else %}light{% endif %}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h5 class="mb-1">{{ warning.title }}</h5>
+                        <p class="mb-1">{{ warning.detail }}</p>
+                        <a href="{{ warning.link }}">Öffnen</a>
+                    </div>
+                    <span class="badge text-bg-{% if warning.severity == 'danger' %}danger{% elif warning.severity == 'warning' %}warning{% elif warning.severity == 'success' %}success{% else %}secondary{% endif %}">
+                        {{ warning.severity|upper }}
+                    </span>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-success" role="alert">
+        Keine Warnungen gefunden.
+    </div>
+{% endif %}
+{% endblock %}
