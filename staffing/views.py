@@ -7,8 +7,6 @@ from django.utils import timezone
 
 from projects.models import EmploymentCategories
 
-from .checks import staff_checks
-
 from .utils import get_salaries_by_month
 
 def index(request):
@@ -59,7 +57,6 @@ def index(request):
 
 def details(request: HttpRequest, staff_id: int):
     staff_member = get_object_or_404(StaffMember, id=staff_id)
-    staff_checks(request, staff_member)
 
     employments = staff_member.employment_set.all()
     for employment in employments:

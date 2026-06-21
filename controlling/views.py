@@ -30,8 +30,30 @@ def warnings(request):
     # 1) Budget checks on staff budget items.
     staff_budget_items = StaffBudgetItem.objects.select_related("project")
     for budget_item in staff_budget_items:
+        if budget_item.get_eligibilities().count() == 0:
+            warnings_list.append({
+                "severity": "warning",
+                "title": f"Personalbudget ohne Kategorien: {budget_item}",
+                "detail": "Diesem Personalbudget sind keine zulässigen Beschäftigungskategorien zugewiesen.",
+                "link": f"/projects/details/{budget_item.project.acronym}/",
+            })
+
         projected_sum = Decimal("0.00")
         for assignment in StaffAssignment.objects.filter(budget_item=budget_item).select_related("employment__staff_member"):
+            assignment_end = assignment.end_date or assignment.start_date
+            project_end = budget_item.project.extension_planning_date or budget_item.project.end_date
+
+            if assignment.start_date < budget_item.project.start_date or assignment_end > project_end:
+                warnings_list.append({
+                    "severity": "warning",
+                    "title": f"Zuweisung außerhalb Budgetzeitraum: {budget_item}",
+                    "detail": (
+                        f"Die Zuweisung {assignment.employment.staff_member} ({assignment.start_date} - {assignment_end}) "
+                        f"liegt außerhalb des Projektzeitraums {budget_item.project.start_date} - {project_end}."
+                    ),
+                    "link": f"/projects/details/{budget_item.project.acronym}/",
+                })
+
             projected_sum += calculate_salary_for_assignment(assignment).salary_sum
 
         if projected_sum > budget_item.amount:
@@ -124,6 +146,54 @@ def warnings(request):
     # 3) Overlapping salary periods per employment.
     for employment in Employment.objects.select_related("staff_member"):
         salaries = list(EmploymentSalaries.objects.filter(employment=employment).order_by("start_date", "end_date"))
+
+        for salary in salaries:
+            if salary.start_date < employment.start_date:
+                warnings_list.append({
+                    "severity": "warning",
+                    "title": f"Gehalt vor Vertragsbeginn: {employment.staff_member}",
+                    "detail": (
+                        f"Gehalt {salary.start_date} - {salary.end_date} beginnt vor der Anstellung "
+                        f"({employment.start_date} - {employment.end_date})."
+                    ),
+                    "link": f"/staffing/details/{employment.staff_member.id}/",
+                })
+
+            if salary.end_date > employment.end_date:
+                warnings_list.append({
+                    "severity": "warning",
+                    "title": f"Gehalt nach Vertragsende: {employment.staff_member}",
+                    "detail": (
+                        f"Gehalt {salary.start_date} - {salary.end_date} endet nach der Anstellung "
+                        f"({employment.start_date} - {employment.end_date})."
+                    ),
+                    "link": f"/staffing/details/{employment.staff_member.id}/",
+                })
+
+        missing_salary_months = []
+        for month in _month_iter(employment.start_date, employment.end_date):
+            month_total = Decimal("0.00")
+            for salary in salaries:
+                if salary.start_date.replace(day=1) <= month <= salary.end_date.replace(day=1):
+                    month_total += salary.salary
+
+            if month_total == Decimal("0.00"):
+                missing_salary_months.append(_month_key(month))
+
+        if missing_salary_months:
+            sample = ", ".join(missing_salary_months[:4])
+            if len(missing_salary_months) > 4:
+                sample += ", ..."
+            warnings_list.append({
+                "severity": "warning",
+                "title": f"Fehlende Gehaltsmonate: {employment.staff_member}",
+                "detail": (
+                    f"Für {len(missing_salary_months)} Monat(e) der Anstellung {employment.start_date} - {employment.end_date} "
+                    f"ist kein Gehalt hinterlegt: {sample}"
+                ),
+                "link": f"/staffing/details/{employment.staff_member.id}/",
+            })
+
         for i in range(len(salaries) - 1):
             current = salaries[i]
             following = salaries[i + 1]

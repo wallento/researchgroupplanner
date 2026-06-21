@@ -8,7 +8,6 @@ from staffing.models import StaffAssignment, StaffFundingAllocation
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
 
-from .checks import check_staff_budget_item
 from .utils import calculate_salary_for_assignment, get_assignments_salary_sum_of_year, get_table_assignments, get_timeline_assignments
 
 
@@ -34,9 +33,6 @@ def details(request: HttpRequest, acronym: str):
     project = get_object_or_404(Project, acronym=acronym)
 
     staff_budget_items = StaffBudgetItem.objects.filter(project=project).all()
-
-    for budget_item in staff_budget_items:
-        check_staff_budget_item(request, budget_item)
 
     for budget_item in staff_budget_items:
         budget_item.staff_assignments = []
