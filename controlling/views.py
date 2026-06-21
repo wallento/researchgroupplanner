@@ -30,6 +30,13 @@ def _project_overhead_available_sum(project):
     return total
 
 
+def _project_overhead_total_sum(project):
+    total = Decimal("0.00")
+    for item in project.overheadbudgetitem_set.all():
+        total += item.amount
+    return total
+
+
 def warnings(request):
     today = timezone.now().date()
     warnings_list = []
@@ -94,7 +101,7 @@ def warnings(request):
 
         staff_budget_sum = project.staffbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
         other_budget_sum = project.otherbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-        overhead_budget_sum = _project_overhead_available_sum(project)
+        overhead_budget_sum = _project_overhead_total_sum(project)
         planned_total = staff_budget_sum + other_budget_sum + overhead_budget_sum
 
         if planned_total != project.budget_total:
@@ -125,7 +132,7 @@ def warnings(request):
             staff_sum += calculate_salary_for_assignment(assignment).salary_sum
 
         other_sum = project.otherbudgetitem_set.aggregate(total=Sum("otherbudgetitemtransaction__amount"))["total"] or Decimal("0.00")
-        overhead_sum = _project_overhead_available_sum(project)
+        overhead_sum = _project_overhead_total_sum(project)
         total_allocated = staff_sum + other_sum + overhead_sum
 
         if total_allocated > project.budget_total:
