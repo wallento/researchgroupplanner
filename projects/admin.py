@@ -7,6 +7,7 @@ from .models import (
     OtherBudgetItem,
     OtherBudgetItemTransaction,
     OverheadBudgetItem,
+    OverheadBudgetItemShare,
     Project,
     StaffBudgetItem,
     StaffBudgetItemEligibility,
@@ -16,9 +17,14 @@ class StaffBudgetItemInlineAdmin(admin.StackedInline):
     model = StaffBudgetItem
     extra = 0
 
+class OverheadBudgetItemShareInlineAdmin(admin.TabularInline):
+    model = OverheadBudgetItemShare
+    extra = 1
+
 class OverheadBudgetItemInlineAdmin(admin.StackedInline):
     model = OverheadBudgetItem
     extra = 0
+    show_change_link = True
 
 class OtherBudgetItemInlineAdmin(admin.StackedInline):
     model = OtherBudgetItem
@@ -31,6 +37,11 @@ class ProjectAdmin(admin.ModelAdmin):
 admin.site.register(Project, ProjectAdmin)
 admin.site.register(Institute)
 admin.site.register(Landesstelle)
+
+class OverheadBudgetItemAdmin(admin.ModelAdmin):
+    inlines = [OverheadBudgetItemShareInlineAdmin]
+
+admin.site.register(OverheadBudgetItem, OverheadBudgetItemAdmin)
 
 class StaffBudgetItemEligibilityAdmin(admin.StackedInline):
     model = StaffBudgetItemEligibility

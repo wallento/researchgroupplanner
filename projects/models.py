@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
+from decimal import Decimal
 
 EmploymentCategories = {
     'student': 'Studentische Hilfskraft',
@@ -33,6 +34,10 @@ class Project(models.Model):
 class Institute(models.Model):
     name = models.CharField(max_length=200, unique=True)
     short_name = models.CharField(max_length=50, unique=True)
+    is_own_chair = models.BooleanField(
+        default=False,
+        help_text="Markiert den eigenen Lehrstuhl. Overhead-Anteile dieses Instituts gelten als verfügbar.",
+    )
 
     def __str__(self):
         return self.short_name
@@ -77,8 +82,37 @@ class OverheadBudgetItem(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
 
+    def available_amount(self):
+        """Sum of shares belonging to institutes marked as own chair."""
+        total = Decimal("0.00")
+        for share in self.overheadbudgetitemshare_set.filter(institute__is_own_chair=True):
+            total += (self.amount * share.percentage / Decimal("100")).quantize(Decimal("0.01"))
+        return total
+
+    def own_chair_percentage(self):
+        return sum(
+            share.percentage
+            for share in self.overheadbudgetitemshare_set.filter(institute__is_own_chair=True)
+        )
+
     def __str__(self):
         return f"{self.project.acronym} - Overhead - {self.amount}"
+
+
+class OverheadBudgetItemShare(models.Model):
+    overhead_item = models.ForeignKey(OverheadBudgetItem, on_delete=models.CASCADE)
+    institute = models.ForeignKey(Institute, on_delete=models.PROTECT)
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+
+    class Meta:
+        unique_together = [("overhead_item", "institute")]
+
+    def __str__(self):
+        return f"{self.overhead_item} → {self.institute}: {self.percentage}%"
 
 class OtherBudgetItem(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)

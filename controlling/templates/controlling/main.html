@@ -42,7 +42,13 @@
                 </td>
                 <td>
                     {% for budget in project.overheadbudgetitem_set.all %}
-                        <div>€ {{ budget.amount }}</div>
+                        <div>
+                            Gesamt: € {{ budget.amount }}<br>
+                            {% for share in budget.overheadbudgetitemshare_set.all %}
+                                {{ share.institute }}: {{ share.percentage }}%{% if share.institute.is_own_chair %} ✓{% endif %}<br>
+                            {% endfor %}
+                            Verfügbar (Lehrstuhl): € {{ budget.available_amount }}
+                        </div>
                     {% endfor %}
                 </td>
             </tr>

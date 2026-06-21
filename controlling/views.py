@@ -23,6 +23,13 @@ def _month_key(date_obj):
     return date_obj.strftime("%Y-%m")
 
 
+def _project_overhead_available_sum(project):
+    total = Decimal("0.00")
+    for item in project.overheadbudgetitem_set.all():
+        total += item.available_amount()
+    return total
+
+
 def warnings(request):
     today = timezone.now().date()
     warnings_list = []
@@ -70,9 +77,24 @@ def warnings(request):
     # 2) Budget checks on total project level.
     projects = Project.objects.all()
     for project in projects:
+        for overhead_item in project.overheadbudgetitem_set.all():
+            distributed_percentage = sum(
+                share.percentage for share in overhead_item.overheadbudgetitemshare_set.all()
+            )
+            if distributed_percentage != Decimal("100.00"):
+                warnings_list.append({
+                    "severity": "warning",
+                    "title": f"Overhead-Verteilung unvollständig: {project.acronym}",
+                    "detail": (
+                        f"Der Overhead-Posten ({overhead_item.amount} EUR) ist aktuell mit "
+                        f"{distributed_percentage}% verteilt. Erwartet sind 100%."
+                    ),
+                    "link": f"/projects/details/{project.acronym}/",
+                })
+
         staff_budget_sum = project.staffbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
         other_budget_sum = project.otherbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-        overhead_budget_sum = project.overheadbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        overhead_budget_sum = _project_overhead_available_sum(project)
         planned_total = staff_budget_sum + other_budget_sum + overhead_budget_sum
 
         if planned_total != project.budget_total:
@@ -103,7 +125,7 @@ def warnings(request):
             staff_sum += calculate_salary_for_assignment(assignment).salary_sum
 
         other_sum = project.otherbudgetitem_set.aggregate(total=Sum("otherbudgetitemtransaction__amount"))["total"] or Decimal("0.00")
-        overhead_sum = project.overheadbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        overhead_sum = _project_overhead_available_sum(project)
         total_allocated = staff_sum + other_sum + overhead_sum
 
         if total_allocated > project.budget_total:
