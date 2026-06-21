@@ -18,6 +18,48 @@
     </div>
 </div>
 
+<h2 class="mt-4">Overhead-Verteilung pro Jahr und Institut</h2>
+
+{% if overhead_rows %}
+    <div class="table-responsive mb-4">
+        <table class="table table-bordered table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Jahr</th>
+                    {% for institute in overhead_institutes %}
+                        <th>{{ institute }}</th>
+                    {% endfor %}
+                    <th>Gesamt</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in overhead_rows %}
+                    <tr>
+                        <th>{{ row.year }}</th>
+                        {% for value in row.values %}
+                            <td>€ {{ value }}</td>
+                        {% endfor %}
+                        <td><strong>€ {{ row.total }}</strong></td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th>Summe</th>
+                    {% for total in overhead_totals %}
+                        <th>€ {{ total }}</th>
+                    {% endfor %}
+                    <th>€ {{ overhead_overall_total }}</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-secondary" role="alert">
+        Es sind aktuell keine Overhead-Verteilungen hinterlegt.
+    </div>
+{% endif %}
+
 {{ statistics_years|json_script:"stats-years" }}
 {{ statistics_yearly_values|json_script:"stats-yearly-values" }}
 
