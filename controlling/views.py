@@ -144,8 +144,11 @@ def warnings(request):
             })
 
     # 3) Overlapping salary periods per employment.
-    for employment in Employment.objects.select_related("staff_member"):
+    for employment in Employment.objects.select_related("staff_member").prefetch_related("stafffundingallocation_set"):
         salaries = list(EmploymentSalaries.objects.filter(employment=employment).order_by("start_date", "end_date"))
+        allocations = list(employment.stafffundingallocation_set.all())
+        has_project_funding = any(allocation.budget_item_id for allocation in allocations)
+        is_landesstelle_only = bool(allocations) and not has_project_funding
 
         for salary in salaries:
             if salary.start_date < employment.start_date:
@@ -180,7 +183,7 @@ def warnings(request):
             if month_total == Decimal("0.00"):
                 missing_salary_months.append(_month_key(month))
 
-        if missing_salary_months:
+        if missing_salary_months and not is_landesstelle_only:
             sample = ", ".join(missing_salary_months[:4])
             if len(missing_salary_months) > 4:
                 sample += ", ..."
