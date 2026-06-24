@@ -20,7 +20,7 @@
     </tr>
     <tr>
         <th>Budget:</th>
-        <td>€ {{ project.budget_total }} (€ {{ project.allocated_sum }} allokiert, € {{ project.remain_sum }} nicht allokiert)</td>
+        <td>€ {{ project.budget_total }} (€ {{ allocated_sum }} allokiert, € {{ remain_sum }} nicht allokiert)</td>
     </tr>
 </table>
 
@@ -248,9 +248,9 @@
         </tr>
     </thead>
     <tbody>
-    {% for staffing in budget.staff_assignments %}
+    {% for staffing in budget.staff_allocations %}
         <tr>
-            <td><a href="{% url 'staffing:details' staffing.assignment.employment.staff_member.id %}">{{ staffing.assignment.employment.staff_member }}</a><br/>({{ staffing.assignment.start_date }} - {{ staffing.assignment.end_date }})</td>
+            <td><a href="{% url 'staffing:details' staffing.allocation.employment.staff_member.id %}">{{ staffing.allocation.employment.staff_member }}</a><br/>({{ staffing.allocation.start_date }} - {{ staffing.allocation.end_date|default:staffing.allocation.employment.end_date }})</td>
             <td style="text-align: right;">€ {{ staffing.salary_sum }}</td>
         </tr>
     {% endfor %}

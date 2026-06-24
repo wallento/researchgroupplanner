@@ -2,6 +2,8 @@ from django.contrib import admin
 
 # Register your models here.
 from .models import (
+    AnnualPool,
+    AnnualPoolBudget,
     Institute,
     Landesstelle,
     OtherBudgetItem,
@@ -60,3 +62,20 @@ class OtherBudgetItemAdmin(admin.ModelAdmin):
     inlines = [OtherBudgetItemTransactionInlineAdmin]
 
 admin.site.register(OtherBudgetItem, OtherBudgetItemAdmin)
+
+
+class AnnualPoolBudgetInlineAdmin(admin.TabularInline):
+    model = AnnualPoolBudget
+    extra = 1
+
+
+@admin.register(AnnualPool)
+class AnnualPoolAdmin(admin.ModelAdmin):
+    inlines = [AnnualPoolBudgetInlineAdmin]
+    list_display = ("title",)
+
+
+@admin.register(AnnualPoolBudget)
+class AnnualPoolBudgetAdmin(admin.ModelAdmin):
+    list_display = ("annual_pool", "year", "amount_assigned")
+    list_filter = ("year", "annual_pool")

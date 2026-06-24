@@ -1,4 +1,4 @@
-from .models import StaffMember, Employment, EmploymentSalaries, StaffAssignment
+from .models import StaffMember, Employment, EmploymentSalaries
 from django.contrib import messages
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta

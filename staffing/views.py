@@ -58,8 +58,13 @@ def index(request):
 def details(request: HttpRequest, staff_id: int):
     staff_member = get_object_or_404(StaffMember, id=staff_id)
 
-    employments = staff_member.employment_set.all()
+    employments = staff_member.employment_set.prefetch_related(
+        "stafffundingallocation_set__budget_item__project",
+        "stafffundingallocation_set__landesstelle",
+        "stafffundingallocation_set__annual_pool_budget__annual_pool",
+    ).all()
     for employment in employments:
         employment.salaries_by_month = get_salaries_by_month(employment)
+        employment.allocations = employment.stafffundingallocation_set.all().order_by("start_date")
 
     return render(request, "staffing/details.html", {"staff_member": staff_member, "employments": employments})

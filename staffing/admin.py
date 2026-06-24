@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import Employment, EmploymentSalaries, StaffAssignment, StaffFundingAllocation, StaffMember
+from .models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
 
 class EmploymentInline(admin.StackedInline):
     model = Employment
@@ -11,7 +11,6 @@ class StaffMemberAdmin(admin.ModelAdmin):
     inlines = [EmploymentInline]
 
 admin.site.register(StaffMember, StaffMemberAdmin)
-admin.site.register(StaffAssignment)
 
 class EmploymentSalariesInline(admin.TabularInline):
     model = EmploymentSalaries

@@ -2,7 +2,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 
-from projects.models import EmploymentCategories, Landesstelle, StaffBudgetItem
+from projects.models import AnnualPoolBudget, EmploymentCategories, Landesstelle, StaffBudgetItem
 
 # Create your models here.
 class StaffMember(models.Model):
@@ -42,20 +42,12 @@ class EmploymentSalaries(models.Model):
     def staff_member(self):
         return self.employment.staff_member
 
-class StaffAssignment(models.Model):
-    employment = models.ForeignKey(Employment, on_delete=models.CASCADE)
-    budget_item = models.ForeignKey(StaffBudgetItem, on_delete=models.CASCADE, null=True, blank=True)
-    start_date = models.DateField()
-    end_date = models.DateField(null=True, blank=True)
-
-    def __str__(self):
-        return f"{self.employment.staff_member} - ({self.start_date} - {self.end_date}) in {self.budget_item}"
-
 
 class StaffFundingAllocation(models.Model):
     employment = models.ForeignKey(Employment, on_delete=models.CASCADE)
     budget_item = models.ForeignKey(StaffBudgetItem, on_delete=models.CASCADE, null=True, blank=True)
     landesstelle = models.ForeignKey(Landesstelle, on_delete=models.CASCADE, null=True, blank=True)
+    annual_pool_budget = models.ForeignKey(AnnualPoolBudget, on_delete=models.CASCADE, null=True, blank=True)
     percentage = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -66,13 +58,31 @@ class StaffFundingAllocation(models.Model):
 
     def clean(self):
         super().clean()
-        if (self.budget_item is None) == (self.landesstelle is None):
-            raise ValidationError("Bitte genau eine Finanzierungsquelle angeben: Projektbudget oder Landesstelle.")
+        source_count = sum(
+            source is not None
+            for source in (self.budget_item, self.landesstelle, self.annual_pool_budget)
+        )
+        if source_count != 1:
+            raise ValidationError(
+                "Bitte genau eine Finanzierungsquelle angeben: Projektbudget, Landesstelle oder Annual Pool Budget."
+            )
         if self.end_date and self.end_date < self.start_date:
             raise ValidationError("Das Enddatum darf nicht vor dem Startdatum liegen.")
 
+        if self.annual_pool_budget_id:
+            allocation_end = self.end_date or self.employment.end_date
+            pool_year = self.annual_pool_budget.year
+            if self.start_date.year != pool_year or allocation_end.year != pool_year:
+                raise ValidationError(
+                    "Zuordnungen auf ein Annual Pool Budget muessen vollstaendig innerhalb des zugehoerigen Jahres liegen."
+                )
+
     def source(self):
-        return self.budget_item if self.budget_item else self.landesstelle
+        if self.budget_item:
+            return self.budget_item
+        if self.landesstelle:
+            return self.landesstelle
+        return self.annual_pool_budget
 
     def __str__(self):
         end_date = self.end_date if self.end_date else "offen"

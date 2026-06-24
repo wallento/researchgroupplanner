@@ -30,6 +30,11 @@ class Project(models.Model):
     def get_years(self):
         return [str(i) for i in range(self.start_date.year, self.end_date.year + 1)]
 
+    def get_effective_end_date(self):
+        if self.extension_planning_date and self.extension_planning_date > self.end_date:
+            return self.extension_planning_date
+        return self.end_date
+
 
 class Institute(models.Model):
     name = models.CharField(max_length=200, unique=True)
@@ -137,3 +142,25 @@ class OtherBudgetItemTransaction(models.Model):
 
     def __str__(self):
         return f"{self.budget_item} - {self.date} - {self.amount}"
+
+
+class AnnualPool(models.Model):
+    title = models.CharField(max_length=200, unique=True)
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.title
+
+
+class AnnualPoolBudget(models.Model):
+    annual_pool = models.ForeignKey(AnnualPool, on_delete=models.CASCADE)
+    year = models.PositiveIntegerField()
+    amount_assigned = models.DecimalField(max_digits=10, decimal_places=2)
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        unique_together = [("annual_pool", "year")]
+        ordering = ["year"]
+
+    def __str__(self):
+        return f"{self.annual_pool.title} - {self.year}: {self.amount_assigned}"

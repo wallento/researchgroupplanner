@@ -1,14 +1,16 @@
 from decimal import Decimal
+from datetime import date
 from .utils import render
 from dateutil.relativedelta import relativedelta
 
-from projects.models import Landesstelle, OverheadBudgetItemShare, Project, StaffBudgetItem
-from staffing.models import Employment, EmploymentSalaries, StaffAssignment, StaffFundingAllocation, StaffMember
+from projects.models import AnnualPool, Landesstelle, OverheadBudgetItemShare, Project, StaffBudgetItem
+from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
+from staffing.utils import get_salaries_by_month
 from django.utils import timezone
 from django.db.models import Q
 from django.db.models import Sum
 
-from projects.utils import calculate_salary_for_assignment
+from projects.utils import calculate_salary_for_allocation
 
 
 def _month_iter(start_date, end_date):
@@ -37,6 +39,14 @@ def _project_overhead_total_sum(project):
     return total
 
 
+def _iterate_month_starts(start_date, end_date):
+    current = start_date.replace(day=1)
+    last = end_date.replace(day=1)
+    while current <= last:
+        yield current
+        current += relativedelta(months=1)
+
+
 def warnings(request):
     today = timezone.now().date()
     warnings_list = []
@@ -53,22 +63,22 @@ def warnings(request):
             })
 
         projected_sum = Decimal("0.00")
-        for assignment in StaffAssignment.objects.filter(budget_item=budget_item).select_related("employment__staff_member"):
-            assignment_end = assignment.end_date or assignment.start_date
+        for allocation in StaffFundingAllocation.objects.filter(budget_item=budget_item).select_related("employment__staff_member"):
+            assignment_end = allocation.end_date or allocation.employment.end_date
             project_end = budget_item.project.extension_planning_date or budget_item.project.end_date
 
-            if assignment.start_date < budget_item.project.start_date or assignment_end > project_end:
+            if allocation.start_date < budget_item.project.start_date or assignment_end > project_end:
                 warnings_list.append({
                     "severity": "warning",
                     "title": f"Zuweisung außerhalb Budgetzeitraum: {budget_item}",
                     "detail": (
-                        f"Die Zuweisung {assignment.employment.staff_member} ({assignment.start_date} - {assignment_end}) "
+                        f"Die Zuweisung {allocation.employment.staff_member} ({allocation.start_date} - {assignment_end}) "
                         f"liegt außerhalb des Projektzeitraums {budget_item.project.start_date} - {project_end}."
                     ),
                     "link": f"/projects/details/{budget_item.project.acronym}/",
                 })
 
-            projected_sum += calculate_salary_for_assignment(assignment).salary_sum
+            projected_sum += calculate_salary_for_allocation(allocation).salary_sum
 
         if projected_sum > budget_item.amount:
             warnings_list.append({
@@ -128,8 +138,8 @@ def warnings(request):
             })
 
         staff_sum = Decimal("0.00")
-        for assignment in StaffAssignment.objects.filter(budget_item__project=project):
-            staff_sum += calculate_salary_for_assignment(assignment).salary_sum
+        for allocation in StaffFundingAllocation.objects.filter(budget_item__project=project):
+            staff_sum += calculate_salary_for_allocation(allocation).salary_sum
 
         other_sum = project.otherbudgetitem_set.aggregate(total=Sum("otherbudgetitemtransaction__amount"))["total"] or Decimal("0.00")
         overhead_sum = _project_overhead_total_sum(project)
@@ -243,6 +253,7 @@ def warnings(request):
     employments = Employment.objects.select_related("staff_member").prefetch_related(
         "stafffundingallocation_set__budget_item__project",
         "stafffundingallocation_set__landesstelle",
+        "stafffundingallocation_set__annual_pool_budget__annual_pool",
     )
 
     for employment in employments:
@@ -350,6 +361,18 @@ def warnings(request):
                             f"Zuordnung endet am {alloc_end}, Landesstelle aber am {ls.end_date}."
                         ),
                         "link": f"/projects/landesstelle/{ls.id}/",
+                    })
+            elif allocation.annual_pool_budget_id:
+                pool_budget = allocation.annual_pool_budget
+                if allocation.start_date.year != pool_budget.year or alloc_end.year != pool_budget.year:
+                    warnings_list.append({
+                        "severity": "warning",
+                        "title": f"Zuordnung außerhalb Annual-Pool-Jahr ({pool_budget.annual_pool.title})",
+                        "detail": (
+                            f"Zuordnung {allocation.percentage}% ({allocation.start_date} - {alloc_end}) "
+                            f"liegt nicht vollständig im Budgetjahr {pool_budget.year}."
+                        ),
+                        "link": "/admin/projects/annualpool/",
                     })
 
     for staff_member in StaffMember.objects.prefetch_related("employment_set"):
@@ -490,6 +513,74 @@ def statistics(request):
         "overhead_overall_total": overhead_overall_total,
     })
 
+
+def annual_pools(request):
+    pools = AnnualPool.objects.prefetch_related("annualpoolbudget_set").order_by("title")
+    pools_data = []
+
+    for pool in pools:
+        budgets = list(pool.annualpoolbudget_set.all().order_by("year"))
+        rows = []
+        total_assigned = Decimal("0.00")
+        total_spent = Decimal("0.00")
+
+        for budget in budgets:
+            allocations = StaffFundingAllocation.objects.filter(
+                annual_pool_budget=budget
+            ).select_related("employment", "employment__staff_member")
+            linked_staff = {}
+
+            spent = Decimal("0.00")
+            for allocation in allocations:
+                employment = allocation.employment
+                linked_staff[employment.staff_member.id] = str(employment.staff_member)
+                if employment.percentage == 0:
+                    continue
+
+                salaries_by_month = get_salaries_by_month(employment)
+                allocation_end = allocation.end_date or employment.end_date
+                overlap_start = max(allocation.start_date, employment.start_date, date(budget.year, 1, 1))
+                overlap_end = min(allocation_end, employment.end_date, date(budget.year, 12, 31))
+                if overlap_end < overlap_start:
+                    continue
+
+                ratio = Decimal(allocation.percentage) / Decimal(employment.percentage)
+                for month_start in _iterate_month_starts(overlap_start, overlap_end):
+                    month_key = month_start.strftime("%Y-%m")
+                    spent += salaries_by_month.get(month_key, Decimal("0.00")) * ratio
+
+            spent = spent.quantize(Decimal("0.01"))
+            assigned = budget.amount_assigned.quantize(Decimal("0.01"))
+            remaining = (assigned - spent).quantize(Decimal("0.01"))
+            utilization = Decimal("0.00") if assigned == 0 else ((spent / assigned) * Decimal("100.00")).quantize(Decimal("0.01"))
+
+            rows.append({
+                "year": budget.year,
+                "assigned": assigned,
+                "spent": spent,
+                "remaining": remaining,
+                "utilization": utilization,
+                "linked_staff": [
+                    {"id": staff_id, "name": name}
+                    for staff_id, name in sorted(linked_staff.items(), key=lambda item: item[1])
+                ],
+            })
+
+            total_assigned += assigned
+            total_spent += spent
+
+        pools_data.append({
+            "pool": pool,
+            "rows": rows,
+            "total_assigned": total_assigned.quantize(Decimal("0.01")),
+            "total_spent": total_spent.quantize(Decimal("0.01")),
+            "total_remaining": (total_assigned - total_spent).quantize(Decimal("0.01")),
+        })
+
+    return render(request, "controlling/annual_pools.html", {
+        "pools_data": pools_data,
+    })
+
 # Create your views here.
 def main(request):
     today = timezone.now().date()
@@ -501,6 +592,8 @@ def main(request):
 
     budgets_per_year = {}
     for project in projects:
+        if project.budget_total is None:
+            continue
         months = (project.end_date.year - project.start_date.year) * 12 + (project.end_date.month - project.start_date.month + 1)
 
         budgets_per_year.setdefault(str(project.start_date.year), {})[project.acronym] = (project.budget_total * (12 - project.start_date.month) / months).quantize(Decimal('0.01'))
@@ -516,6 +609,7 @@ def main(request):
     employments = Employment.objects.select_related('staff_member').prefetch_related(
         'stafffundingallocation_set__budget_item__project',
         'stafffundingallocation_set__landesstelle__institute',
+        'stafffundingallocation_set__annual_pool_budget__annual_pool',
     ).order_by('staff_member__last_name', 'staff_member__first_name', 'start_date')
 
     staff_timeline_entries = []
@@ -526,6 +620,8 @@ def main(request):
         for allocation in allocations:
             if allocation.budget_item_id:
                 source = f"Projekt {allocation.budget_item.project.acronym}"
+            elif allocation.annual_pool_budget_id:
+                source = f"Annual Pool {allocation.annual_pool_budget.annual_pool.title} ({allocation.annual_pool_budget.year})"
             else:
                 institute = f" ({allocation.landesstelle.institute.short_name})" if allocation.landesstelle.institute_id else ""
                 source = f"Landesstelle {allocation.landesstelle.title}{institute}"
