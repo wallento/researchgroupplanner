@@ -30,28 +30,14 @@ def calculate_salary_for_assignment(assignment: StaffAssignment):
         period_end = min(salary_end, assignment.end_date)
 
         current = period_start.replace(day=1)
-        period_end_month_start = period_end.replace(day=1)
 
         while current <= period_end:
             key = current.strftime("%Y-%m")
             current_salary = salary.salary
-            days_in_month = monthrange(current.year, current.month)[1]
-
-            is_first_month = current == period_start.replace(day=1)
-            is_last_month = current == period_end_month_start
-
-            if is_first_month and is_last_month:
-                # Single-month assignment: prorate both start and end
-                active_days = period_end.day - period_start.day + 1
-                current_salary *= Decimal(active_days / days_in_month)
-                current_salary = current_salary.quantize(Decimal('0.01'))
-            elif is_first_month and period_start.day != 1:
+            if current.month == period_start.month and period_start.day != 1:
+                days_in_month = monthrange(current.year, current.month)[1]
                 current_salary *= Decimal((days_in_month - period_start.day + 1) / days_in_month)
                 current_salary = current_salary.quantize(Decimal('0.01'))
-            elif is_last_month and period_end.day != days_in_month:
-                current_salary *= Decimal(period_end.day / days_in_month)
-                current_salary = current_salary.quantize(Decimal('0.01'))
-
             months[key] = months.get(key, 0) + current_salary
             total_salary += current_salary
             current += relativedelta(months=1)
