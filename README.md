@@ -98,6 +98,37 @@ docker compose exec web python manage.py createsuperuser
 
 The user is stored in the database and does not need to be recreated on every restart.
 
+## Email Notifications
+
+**Email notifications are sent automatically every day at 8:00 AM** for:
+- Staff members with upcoming contract expiries (30 days before)
+- Project milestones due soon (30 days before)
+
+Only staff members with `is_leadership=True` and a valid email address will receive notifications.
+
+### Email Configuration
+
+Set these environment variables in your `docker-compose.yml`:
+
+- `EMAIL_BACKEND`: Usually `django.core.mail.backends.smtp.EmailBackend`
+- `EMAIL_HOST`: Your SMTP server address
+- `EMAIL_PORT`: Usually `25`, `587` (TLS), or `465` (SSL)
+- `EMAIL_USE_TLS`: Set to `"1"` for port 587, `"0"` otherwise
+- `EMAIL_USE_SSL`: Set to `"1"` for port 465, `"0"` otherwise
+- `EMAIL_HOST_USER`: SMTP username (if required)
+- `EMAIL_HOST_PASSWORD`: SMTP password (if required)
+- `DEFAULT_FROM_EMAIL`: Sender email address
+
+### SSL Certificate Verification Issues
+
+If you get `SSL: CERTIFICATE_VERIFY_FAILED` errors (common with self-signed or internal certificates), use the insecure backend:
+
+```yaml
+EMAIL_BACKEND: "controlling.email_backend.InsecureEmailBackend"
+```
+
+⚠️ This disables SSL certificate verification. Only use this for internal/development SMTP servers with self-signed certificates.
+
 **Note:** Email notifications for contract expiries and milestones are sent automatically every day at 8:00 AM (see environment variables above).
 
 The image is published to GitHub Container Registry via the workflow in `.github/workflows/docker-publish.yml`.
