@@ -11,6 +11,7 @@ from .models import (
     OverheadBudgetItem,
     OverheadBudgetItemShare,
     Project,
+    ProjectMilestone,
     StaffBudgetItem,
     StaffBudgetItemEligibility,
 )
@@ -32,9 +33,14 @@ class OtherBudgetItemInlineAdmin(admin.StackedInline):
     model = OtherBudgetItem
     extra = 0
 
+class ProjectMilestoneInlineAdmin(admin.TabularInline):
+    model = ProjectMilestone
+    extra = 1
+    fields = ('date', 'title')
+
 
 class ProjectAdmin(admin.ModelAdmin):
-    inlines = [StaffBudgetItemInlineAdmin, OverheadBudgetItemInlineAdmin, OtherBudgetItemInlineAdmin]
+    inlines = [StaffBudgetItemInlineAdmin, OverheadBudgetItemInlineAdmin, OtherBudgetItemInlineAdmin, ProjectMilestoneInlineAdmin]
 
 admin.site.register(Project, ProjectAdmin)
 admin.site.register(Institute)

@@ -659,6 +659,17 @@ def main(request):
         else:
             staff_timeline_entries_employees.append(entry)
 
+    # Load project milestones
+    milestones = []
+    for project in projects:
+        for milestone in project.milestones.all():
+            milestones.append({
+                'project': project.acronym,
+                'project_id': project.id,
+                'date': milestone.date,
+                'title': milestone.title,
+            })
+
     return render(request, "controlling/main.html", {
         "projects": projects,
         "staff_list": staff,
@@ -666,4 +677,5 @@ def main(request):
         "landesstellen": landesstellen,
         "staff_timeline_entries_hiwis": staff_timeline_entries_hiwis,
         "staff_timeline_entries_employees": staff_timeline_entries_employees,
+        "project_milestones": milestones,
     })

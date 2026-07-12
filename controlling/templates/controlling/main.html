@@ -134,6 +134,21 @@
         pointer-events: none;
         white-space: normal;
     }
+
+    .vis-item.milestone-point {
+        background-color: #ba3633 !important;
+        border-color: #ba3633 !important;
+        color: #ba3633 !important;
+        width: 12px !important;
+        height: 12px !important;
+        border-radius: 50% !important;
+        overflow: hidden !important;
+        margin-left: -6px !important;
+    }
+
+    .vis-item.milestone-point .vis-item-content {
+        display: none !important;
+    }
 </style>
 
 <script type="text/javascript">
@@ -279,6 +294,20 @@
             });
         }
 {% endif %}
+{% endfor %}
+
+{% for milestone in project_milestones %}
+        var milestoneDate = gpBuildDate({{ milestone.date|date:"Y" }}, {{ milestone.date|date:"n" }}, {{ milestone.date|date:"j" }});
+        items.push({
+            id: 'milestone_{{ milestone.project_id }}_{{ forloop.counter }}',
+            group: 'p{{ milestone.project_id }}',
+            content: '●',
+            title: '<strong>Meilenstein: {{ milestone.title|escapejs }}</strong><br>{{ milestone.date }}',
+            start: milestoneDate,
+            end: milestoneDate,
+            className: 'milestone-point',
+            type: 'point'
+        });
 {% endfor %}
 
         if (!items.length) {

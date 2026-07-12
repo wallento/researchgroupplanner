@@ -36,6 +36,18 @@ class Project(models.Model):
         return self.end_date
 
 
+class ProjectMilestone(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='milestones')
+    date = models.DateField()
+    title = models.CharField(max_length=200)
+
+    class Meta:
+        ordering = ['date']
+
+    def __str__(self):
+        return f"{self.project.acronym} - {self.title} ({self.date})"
+
+
 class Institute(models.Model):
     name = models.CharField(max_length=200, unique=True)
     short_name = models.CharField(max_length=50, unique=True)
