@@ -328,11 +328,11 @@
     <div id="timeline_projects" class="timeline-shell timeline-shell--projects"></div>
 </div>
 
-<h2 class="mt-2">Mitarbeitende</h2>
+<h2 class="mt-2">Mitarbeiter</h2>
 
 <script type="text/javascript">
-    function gpRenderStaffTimeline() {
-        var container = document.getElementById('timeline_staff');
+    function gpRenderEmployeesTimeline() {
+        var container = document.getElementById('timeline_employees');
         if (!window.vis || !vis.Timeline) {
             container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
             return;
@@ -343,7 +343,7 @@
         var tooltips = {};
         var existingGroups = {};
 
-{% for row in staff_timeline_entries %}
+{% for row in staff_timeline_entries_employees %}
         var groupId = 's{{ row.staff_id }}';
         if (!existingGroups[groupId]) {
             groups.push({ id: groupId, content: '{{ row.staff|escapejs }}' });
@@ -360,7 +360,127 @@
         var percentage = Number('{{ row.percentage }}'.replace(',', '.'));
         if (isNaN(percentage)) percentage = 0;
 
-        var itemId = 'employment_{{ forloop.counter0 }}';
+        var itemId = 'employment_employees_{{ forloop.counter0 }}';
+        links[itemId] = '{% url "staffing:details" row.staff_id %}';
+        tooltips[itemId] = '{{ row.tooltip_html|escapejs }}';
+
+        items.push({
+            id: itemId,
+            group: groupId,
+            content: 'Vertrag ' + percentage + '%',
+            start: startDate,
+            end: endDate,
+            style: 'background-color: ' + gpPercentageColor(percentage) + '; border-color: #4e78b4; color: #ffffff;'
+        });
+{% endfor %}
+
+        if (!items.length) {
+            container.innerHTML = '<p class="m-3">Keine Vertrags- oder Zuordnungsdaten vorhanden.</p>';
+            return;
+        }
+
+        var range = gpTimelineRange(items);
+        var windowRange = gpBuildWindow(range);
+        var monthSpan = gpMonthSpan(windowRange.min, windowRange.max);
+        container.style.minWidth = '100%';
+        container.style.height = 'auto';
+
+        var timeline = new vis.Timeline(container, items, groups, {
+            stack: false,
+            min: windowRange.min,
+            max: windowRange.max,
+            start: windowRange.start,
+            end: windowRange.end,
+            zoomable: true,
+            moveable: true,
+            horizontalScroll: true,
+            verticalScroll: false,
+            showCurrentTime: true,
+            zoomKey: 'ctrlKey',
+            margin: { item: { horizontal: 4, vertical: 6 }, axis: 6 },
+            groupHeightMode: 'fitItems',
+            autoResize: true,
+            height: null,
+            minHeight: 0,
+            orientation: { axis: 'bottom' },
+            locale: 'de',
+            timeAxis: { scale: 'month', step: 1 },
+            format: {
+                minorLabels: {
+                    month: 'MMM',
+                },
+                majorLabels: {
+                    month: 'YYYY',
+                },
+            },
+            showTooltips: false,
+        });
+
+        timeline.on('itemover', function (properties) {
+            var tooltipHtml = tooltips[properties.item];
+            if (!tooltipHtml || !properties.event) {
+                return;
+            }
+            gpShowFloatingTooltip(tooltipHtml, properties.event.pageX, properties.event.pageY);
+        });
+
+        timeline.on('mouseMove', function (properties) {
+            if (!properties.event) {
+                return;
+            }
+            gpMoveFloatingTooltip(properties.event.pageX, properties.event.pageY);
+        });
+
+        timeline.on('itemout', function () {
+            gpHideFloatingTooltip();
+        });
+
+        timeline.on('rangechange', function () {
+            gpHideFloatingTooltip();
+        });
+
+        timeline.on('select', function (properties) {
+            gpHideFloatingTooltip();
+            if (!properties.items || !properties.items.length) {
+                return;
+            }
+            var target = links[properties.items[0]];
+            if (target) {
+                window.location.href = target;
+            }
+        });
+    }
+
+    function gpRenderHiwisTimeline() {
+        var container = document.getElementById('timeline_hiwis');
+        if (!window.vis || !vis.Timeline) {
+            container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
+            return;
+        }
+        var groups = [];
+        var items = [];
+        var links = {};
+        var tooltips = {};
+        var existingGroups = {};
+
+{% for row in staff_timeline_entries_hiwis %}
+        var groupId = 's{{ row.staff_id }}';
+        if (!existingGroups[groupId]) {
+            groups.push({ id: groupId, content: '{{ row.staff|escapejs }}' });
+            existingGroups[groupId] = true;
+        }
+
+        var startDate = gpBuildDate({{ row.start|date:"Y" }}, {{ row.start|date:"n" }}, {{ row.start|date:"j" }});
+        var endDate = gpBuildDate({{ row.end|date:"Y" }}, {{ row.end|date:"n" }}, {{ row.end|date:"j" }});
+        if (endDate <= startDate) {
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 1);
+        }
+
+        var percentage = Number('{{ row.percentage }}'.replace(',', '.'));
+        if (isNaN(percentage)) percentage = 0;
+
+        var itemId = 'employment_hiwis_{{ forloop.counter0 }}';
         links[itemId] = '{% url "staffing:details" row.staff_id %}';
         tooltips[itemId] = '{{ row.tooltip_html|escapejs }}';
 
@@ -459,12 +579,19 @@
             window.__gpSingleLetterMonthsConfigured = true;
         }
         gpRenderProjectTimeline();
-        gpRenderStaffTimeline();
+        gpRenderEmployeesTimeline();
+        gpRenderHiwisTimeline();
     });
 </script>
 
-<div id="timeline_staff_scroll" class="timeline-scroll">
-    <div id="timeline_staff" class="timeline-shell timeline-shell--staff"></div>
+<div id="timeline_employees_scroll" class="timeline-scroll">
+    <div id="timeline_employees" class="timeline-shell timeline-shell--staff"></div>
+</div>
+
+<h2 class="mt-2">Studentische Hilfskräfte</h2>
+
+<div id="timeline_hiwis_scroll" class="timeline-scroll">
+    <div id="timeline_hiwis" class="timeline-shell timeline-shell--staff"></div>
 </div>
 
 <h2 class="mt-2">Jahresscheiben</h2>

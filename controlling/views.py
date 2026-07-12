@@ -612,7 +612,9 @@ def main(request):
         'stafffundingallocation_set__annual_pool_budget__annual_pool',
     ).order_by('staff_member__last_name', 'staff_member__first_name', 'start_date')
 
-    staff_timeline_entries = []
+    staff_timeline_entries_hiwis = []
+    staff_timeline_entries_employees = []
+    
     for employment in employments:
         staff_name = str(employment.staff_member)
         allocation_lines = []
@@ -636,7 +638,7 @@ def main(request):
 
         allocation_html = "<br>".join(allocation_lines) if allocation_lines else "Keine Zuordnungen"
 
-        staff_timeline_entries.append({
+        entry = {
             'staff': staff_name,
             'staff_id': employment.staff_member.id,
             'percentage': employment.percentage,
@@ -649,12 +651,19 @@ def main(request):
             ),
             'start': employment.start_date,
             'end': employment.end_date,
-        })
+        }
+        
+        # Separate by category: HiWis vs. Employees
+        if employment.category == 'student':
+            staff_timeline_entries_hiwis.append(entry)
+        else:
+            staff_timeline_entries_employees.append(entry)
 
     return render(request, "controlling/main.html", {
         "projects": projects,
         "staff_list": staff,
         "budgets_per_year": budgets_per_year,
         "landesstellen": landesstellen,
-        "staff_timeline_entries": staff_timeline_entries,
+        "staff_timeline_entries_hiwis": staff_timeline_entries_hiwis,
+        "staff_timeline_entries_employees": staff_timeline_entries_employees,
     })
