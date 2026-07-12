@@ -8,6 +8,8 @@ from projects.models import AnnualPoolBudget, EmploymentCategories, Landesstelle
 class StaffMember(models.Model):
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
+    email = models.EmailField(blank=True, default='')
+    is_leadership = models.BooleanField(default=False, help_text="Person hat Leitungsfunktion (z.B. Professor)")
     status = models.CharField(max_length=20, choices={
         'in_hire': 'Einstellung',
         'active': 'Aktiv',

@@ -8,7 +8,13 @@ class EmploymentInline(admin.StackedInline):
     extra = 0
 
 class StaffMemberAdmin(admin.ModelAdmin):
+    list_display = ('get_full_name', 'email', 'is_leadership', 'status')
+    fields = ('first_name', 'last_name', 'email', 'is_leadership', 'status')
     inlines = [EmploymentInline]
+    
+    def get_full_name(self, obj):
+        return str(obj)
+    get_full_name.short_description = 'Name'
 
 admin.site.register(StaffMember, StaffMemberAdmin)
 
