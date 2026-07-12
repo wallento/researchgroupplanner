@@ -68,6 +68,15 @@ services:
 			DJANGO_ALLOWED_HOSTS: "example.com"
 			DJANGO_CSRF_TRUSTED_ORIGINS: "https://example.com"
 			DJANGO_DB_NAME: /data/db.sqlite3
+			# Email notifications (optional)
+			EMAIL_BACKEND: "django.core.mail.backends.smtp.EmailBackend"
+			EMAIL_HOST: "smtp.example.com"
+			EMAIL_PORT: "25"
+			EMAIL_USE_TLS: "0"
+			EMAIL_USE_SSL: "0"
+			EMAIL_HOST_USER: ""
+			EMAIL_HOST_PASSWORD: ""
+			DEFAULT_FROM_EMAIL: "noreply@example.com"
 		volumes:
 			- ./data:/data
 		expose:
@@ -88,5 +97,7 @@ docker compose exec web python manage.py createsuperuser
 ```
 
 The user is stored in the database and does not need to be recreated on every restart.
+
+**Note:** Email notifications for contract expiries and milestones are sent automatically every day at 8:00 AM (see environment variables above).
 
 The image is published to GitHub Container Registry via the workflow in `.github/workflows/docker-publish.yml`.

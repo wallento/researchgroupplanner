@@ -63,6 +63,49 @@
 {{ statistics_years|json_script:"stats-years" }}
 {{ statistics_yearly_values|json_script:"stats-yearly-values" }}
 
+<!-- Temporary: Test Email Button -->
+<div class="alert alert-info mt-4" role="alert">
+    <strong>⚙️ Test-Modus:</strong> E-Mail-Konfiguration testen
+    <button id="testEmailBtn" class="btn btn-sm btn-primary ms-2">Test-E-Mail senden</button>
+    <div id="testEmailResponse" class="mt-2"></div>
+</div>
+
+<script>
+    document.getElementById('testEmailBtn').addEventListener('click', function() {
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Wird gesendet...';
+        const responseDiv = document.getElementById('testEmailResponse');
+        
+        fetch('{% url "send_test_email" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: ''
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = 'Test-E-Mail senden';
+            
+            const alertClass = data.success ? 'alert-success' : 'alert-danger';
+            responseDiv.innerHTML = `<div class="alert ${alertClass}" role="alert">${data.message}</div>`;
+            
+            // Auto-hide after 5 seconds
+            if (data.success) {
+                setTimeout(() => responseDiv.innerHTML = '', 5000);
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.textContent = 'Test-E-Mail senden';
+            responseDiv.innerHTML = `<div class="alert alert-danger" role="alert">Fehler: ${error.message}</div>`;
+        });
+    });
+</script>
+
 <script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
 <script>
     (function () {

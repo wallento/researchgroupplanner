@@ -8,6 +8,10 @@ from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocati
 from staffing.utils import get_salaries_by_month
 from django.utils import timezone
 from django.db.models import Q
+from django.http import JsonResponse
+from django.core.mail import send_mail
+from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Sum
 
 from projects.utils import calculate_salary_for_allocation
@@ -679,3 +683,57 @@ def main(request):
         "staff_timeline_entries_employees": staff_timeline_entries_employees,
         "project_milestones": milestones,
     })
+
+
+def send_test_email(request):
+    """Temporary view to test email configuration"""
+    if request.method == 'POST':
+        # Try to get email from POST data or current user
+        recipient_email = request.POST.get('email')
+        if not recipient_email and request.user.is_authenticated:
+            recipient_email = request.user.email
+        
+        # If still no email, try to find an admin user
+        if not recipient_email:
+            admin_user = StaffMember.objects.filter(is_leadership=True, email__isnull=False).exclude(email='').first()
+            if admin_user:
+                recipient_email = admin_user.email
+        
+        if not recipient_email:
+            return JsonResponse({
+                'success': False,
+                'message': 'Keine E-Mail-Adresse gefunden. Bitte einen Leiter mit E-Mail in Admin konfigurieren.'
+            })
+        
+        try:
+            subject = 'Test-E-Mail - Research Group Planning Tool'
+            message = f"""Hallo,
+
+Dies ist eine Test-E-Mail vom Research Group Planning Tool.
+
+Die E-Mail-Konfiguration funktioniert korrekt!
+
+Testdatum: {timezone.now().strftime('%d.%m.%Y %H:%M:%S')}
+
+Grüße,
+Das Research Group Planning System"""
+            
+            send_mail(
+                subject,
+                message,
+                from_email=None,  # Use DEFAULT_FROM_EMAIL from settings
+                recipient_list=[recipient_email],
+                fail_silently=False,
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Test-E-Mail erfolgreich an {recipient_email} gesendet!'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'Fehler beim Versenden: {str(e)}'
+            })
+    
+    return JsonResponse({'success': False, 'message': 'POST erforderlich'})

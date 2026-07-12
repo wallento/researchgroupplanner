@@ -19,12 +19,13 @@ from django.conf import settings
 from django.urls import include, path
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 
-from controlling.views import annual_pools as controlling_annual_pools, main as controlling_main, warnings as controlling_warnings, statistics as controlling_statistics
+from controlling.views import annual_pools as controlling_annual_pools, main as controlling_main, warnings as controlling_warnings, statistics as controlling_statistics, send_test_email
 
 urlpatterns = [
     path("", controlling_main, name="main"),
     path("warnings/", controlling_warnings, name="warnings"),
     path("statistics/", controlling_statistics, name="statistics"),
+    path("send-test-email/", send_test_email, name="send_test_email"),
     path("annual-pools/", controlling_annual_pools, name="annual_pools"),
     path("staffing/", include("staffing.urls")),
     path("projects/", include("projects.urls")),

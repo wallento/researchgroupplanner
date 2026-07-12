@@ -1,0 +1,10 @@
+Erinnerung: Projektmeilenstein fällig
+
+Liebe/r {{ leader_name }},
+
+der Meilenstein "{{ milestone_title }}" des Projekts {{ project_acronym }} ist in einem Monat fällig ({{ milestone_date }}).
+
+Bitte stellen Sie sicher, dass alle erforderlichen Maßnahmen eingeleitet sind.
+
+---
+Research Group Planning Tool

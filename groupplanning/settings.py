@@ -161,3 +161,15 @@ if env_bool('DJANGO_SECURE_PROXY_SSL_HEADER', False):
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Email Configuration
+# https://docs.djangoproject.com/en/5.2/topics/email/
+
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
+EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', False)
+EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
