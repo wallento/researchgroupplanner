@@ -18,12 +18,18 @@ class Command(BaseCommand):
         notification_date = today + relativedelta(months=1)
         
         self.stdout.write(self.style.SUCCESS(f'Checking for notifications on {notification_date}...'))
+        self.stdout.write(f'Today: {today}')
         
         # 1. Send contract expiry notifications
-        self._send_contract_expiry_notifications(today, notification_date)
+        contracts_count = self._send_contract_expiry_notifications(today, notification_date)
         
-        # 2. Send milestone due notifications
-        self._send_milestone_notifications(today, notification_date)
+        # 2. Send milestone notifications
+        milestones_count = self._send_milestone_notifications(today, notification_date)
+        
+        if contracts_count == 0 and milestones_count == 0:
+            self.stdout.write(self.style.WARNING('⚠️ Keine Benachrichtigungen gefunden für den berechneten Datum.'))
+        else:
+            self.stdout.write(self.style.SUCCESS(f'✓ {contracts_count} Verträge, {milestones_count} Meilensteine verarbeitet'))
         
         self.stdout.write(self.style.SUCCESS('Notifications sent successfully!'))
 
@@ -34,6 +40,9 @@ class Command(BaseCommand):
             end_date=notification_date,
             staff_member__is_leadership=True
         ).select_related('staff_member')
+        
+        sent_count = 0
+        self.stdout.write(f'  Verträge endetend am {notification_date}: {employments.count()}')
         
         for employment in employments:
             # Check if already notified
@@ -80,10 +89,13 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS(f'✓ Sent contract expiry notification to {employment.staff_member.email}')
                 )
+                sent_count += 1
             except Exception as e:
                 self.stdout.write(
                     self.style.ERROR(f'✗ Error sending email to {employment.staff_member.email}: {str(e)}')
                 )
+        
+        return sent_count
 
     def _send_milestone_notifications(self, today, notification_date):
         """Send notifications for milestones due in 1 month"""
@@ -94,6 +106,10 @@ class Command(BaseCommand):
         
         # Get all leaders
         leaders = StaffMember.objects.filter(is_leadership=True, email__isnull=False).exclude(email='')
+        
+        sent_count = 0
+        self.stdout.write(f'  Meilensteine fällig am {notification_date}: {milestones.count()}')
+        self.stdout.write(f'  Leiter mit E-Mail: {leaders.count()}')
         
         for milestone in milestones:
             for leader in leaders:
@@ -137,7 +153,10 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.SUCCESS(f'✓ Sent milestone notification to {leader.email}')
                     )
+                    sent_count += 1
                 except Exception as e:
                     self.stdout.write(
                         self.style.ERROR(f'✗ Error sending email to {leader.email}: {str(e)}')
                     )
+        
+        return sent_count
