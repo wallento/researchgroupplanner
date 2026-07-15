@@ -1,0 +1,10 @@
+Erinnerung: Vertrag läuft aus
+
+Liebe/r {{ staff_member_name }},
+
+der Vertrag von {{ employee_name }} läuft in einem Monat ({{ contract_end_date }}) aus.
+
+Bitte überprüfen Sie, ob eine Verlängerung geplant ist oder ob weitere Maßnahmen erforderlich sind.
+
+---
+Research Group Planning Tool

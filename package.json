@@ -1,0 +1,14 @@
+{
+  "name": "researchgroupplanner-assets",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Frontend vendor assets for Django staticfiles",
+  "scripts": {
+    "build:assets": "node tools/build-vendor-assets.mjs"
+  },
+  "dependencies": {
+    "bootstrap": "5.3.3",
+    "chart.js": "4.4.4",
+    "vis-timeline": "7.7.3"
+  }
+}

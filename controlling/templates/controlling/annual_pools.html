@@ -1,0 +1,74 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}Annual Pools{% endblock %}
+{% block heading %}Annual Pools{% endblock %}
+
+{% block content %}
+<p class="text-muted">Jährliche Mitteltöpfe (z.B. Studienmittel, Berufungsmittel) mit Zuweisung, Verbrauch und Rest pro Jahr.</p>
+
+{% if pools_data %}
+    {% for entry in pools_data %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <strong>{{ entry.pool.title }}</strong>
+            </div>
+            <div class="card-body">
+                {% if entry.rows %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Jahr</th>
+                                    <th>Zugewiesen</th>
+                                    <th>Verbraucht</th>
+                                    <th>Rest</th>
+                                    <th>Auslastung</th>
+                                    <th>Zuordnungen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in entry.rows %}
+                                    <tr>
+                                        <td>{{ row.year }}</td>
+                                        <td>€ {{ row.assigned }}</td>
+                                        <td>€ {{ row.spent }}</td>
+                                        <td>€ {{ row.remaining }}</td>
+                                        <td>{{ row.utilization }}%</td>
+                                        <td>
+                                            {% if row.linked_staff %}
+                                                {% for person in row.linked_staff %}
+                                                    <a href="{% url 'staffing:details' person.id %}">{{ person.name }}</a>{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Gesamt</th>
+                                    <th>€ {{ entry.total_assigned }}</th>
+                                    <th>€ {{ entry.total_spent }}</th>
+                                    <th>€ {{ entry.total_remaining }}</th>
+                                    <th></th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary mb-0" role="alert">
+                        Für diesen Annual Pool sind noch keine Jahresbudgets hinterlegt.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-secondary" role="alert">
+        Es sind noch keine Annual Pools angelegt.
+    </div>
+{% endif %}
+{% endblock %}

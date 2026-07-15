@@ -1,0 +1,30 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}Mitarbeiter{% endblock %}
+{% block heading %}Mitarbeiter{% endblock %}
+
+{% block content %}
+<h2 class="mt-3">Aktuelle Mitarbeiter</h2>
+{% for category_key, category in current_staff_by_category %}
+    <h3 class="mt-3">{{ category.label }}</h3>
+    <ul>
+    {% for staff in category.staff %}
+        <li><a href="{% url 'staffing:details' staff.id %}">{{ staff }}</a></li>
+    {% endfor %}
+    </ul>
+{% empty %}
+    <p>Keine aktuellen Mitarbeiter vorhanden.</p>
+{% endfor %}
+
+<h2 class="mt-4">Ehemalige Mitarbeiter</h2>
+{% for category_key, category in former_staff_by_category %}
+    <h3 class="mt-3">{{ category.label }}</h3>
+    <ul>
+    {% for staff in category.staff %}
+        <li><a href="{% url 'staffing:details' staff.id %}">{{ staff }}</a></li>
+    {% endfor %}
+    </ul>
+{% empty %}
+    <p>Keine ehemaligen Mitarbeiter vorhanden.</p>
+{% endfor %}
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "controlling/base.html" %}
+{% load static %}
 
 {% block title %}{{ project.acronym }}{% endblock %}
 {% block heading %}{{ project.acronym }}{% endblock %}
@@ -10,11 +11,16 @@
 <table class="table table-bordered">
     <tr>
         <th>Laufzeit:</th>
-        <td>{{ project.start_date }} - {{ project.end_date }}</td>
+        <td>
+            {{ project.start_date }} - {{ project.end_date }}
+            {% if project.extension_planning_date and project.extension_planning_date > project.end_date %}
+                <br><span class="text-muted">kostenneutrale Verlängerung bis {{ project.extension_planning_date }}</span>
+            {% endif %}
+        </td>
     </tr>
     <tr>
         <th>Budget:</th>
-        <td>€ {{ project.budget_total }} (€ {{ project.allocated_sum }} allokiert, € {{ project.remain_sum }} nicht allokiert)</td>
+        <td>€ {{ project.budget_total }} (€ {{ allocated_sum }} allokiert, € {{ remain_sum }} nicht allokiert)</td>
     </tr>
 </table>
 
@@ -62,48 +68,173 @@
 </table>
 
 <h2>Staffing</h2>
-<!-- Google Charts Timeline for Employees and Projects -->
-<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-<script type="text/javascript">
-    google.charts.load('current', {'packages':['timeline']});
-    google.charts.setOnLoadCallback(drawChart);
+<link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
+<script src="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.js' %}"></script>
 
-    function drawChart() {
-        var container = document.getElementById('timeline');
-        var chart = new google.visualization.Timeline(container);
-        var dataTable = new google.visualization.DataTable();
-
-        dataTable.addColumn({ type: 'string', id: 'Employee' });
-        dataTable.addColumn({ type: 'string', id: 'Category'});
-        dataTable.addColumn({ type: 'string', role: 'tooltip' });
-        dataTable.addColumn({ type: 'date', id: 'Start' });
-        dataTable.addColumn({ type: 'date', id: 'End' });
-
-        // Example data: [Employee, Project, Start, End]
-        dataTable.addRows([
-{% for assignment in timeline_assignments %}
-            [ '{{ assignment.employee }}', '{{ assignment.category }}', '{{ assignment.category }}', new Date("{{ assignment.start.isoformat }}"), new Date("{{ assignment.end.isoformat }}") ],
-{% endfor %}
-        ]);
-        // Dynamically set chart height based on number of rows
-        var rowCount = dataTable.getNumberOfRows();
-        container.style.height = (rowCount * 45 + 47) + 'px'; 
-
-        var options = {
-            timeline: { showRowLabels: true, showBarLabels: false },
-            hAxis: {
-                format: 'MMM yyyy',
-                minorGridlines: { count: 12 },
-                majorGridlines: { count: 2 },
-                minValue: new Date("{{ project.start_date.isoformat }}"),
-                maxValue: new Date("{{ project.end_date.isoformat }}"),
-            }
-        };
-
-        chart.draw(dataTable, options);
+<style>
+    .timeline-scroll {
+        border: 1px solid #d6d6d6;
+        border-radius: 8px;
+        background: #fff;
+        overflow-x: hidden;
+        overflow-y: visible;
+        box-sizing: border-box;
+        margin-bottom: 1rem;
     }
+
+    .timeline-shell {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        min-width: 100%;
+        min-height: 0;
+    }
+
+    .timeline-shell .vis-timeline {
+        border: 0;
+    }
+
+    .timeline-shell .vis-item {
+        background-color: #004990;
+        border-color: #003a73;
+        color: #ffffff;
+    }
+
+    .vis-item .vis-item-content {
+        color: #ffffff !important;
+    }
+
+    .vis-time-axis .vis-text {
+        font-size: 0.75rem;
+    }
+
+    .vis-tooltip {
+        z-index: 2000;
+        max-height: none;
+        overflow: visible;
+    }
+</style>
+
+<script type="text/javascript">
+    function gpBuildDate(year, month, day) {
+        return new Date(year, month - 1, day);
+    }
+
+    function gpMonthSpan(start, end) {
+        return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    }
+
+    function gpTimelineRange(items) {
+        var min = null;
+        var max = null;
+        for (var i = 0; i < items.length; i++) {
+            var start = new Date(items[i].start);
+            var end = new Date(items[i].end);
+            if (!min || start < min) min = start;
+            if (!max || end > max) max = end;
+        }
+        return { min: min, max: max };
+    }
+
+    function gpBuildWindow(range) {
+        var now = new Date();
+        var desiredStart = new Date(now.getFullYear() - 3, 0, 1);
+        var desiredEnd = new Date(now.getFullYear() + 3, 11, 31);
+        var min = new Date(range.min.getFullYear(), range.min.getMonth() - 3, 1);
+        var max = new Date(range.max.getFullYear(), range.max.getMonth() + 4, 0);
+        if (desiredStart < min) min = new Date(desiredStart);
+        if (desiredEnd > max) max = new Date(desiredEnd);
+        var start = new Date(desiredStart);
+        var end = new Date(desiredEnd);
+        if (start < min) start = new Date(min);
+        if (end > max) end = new Date(max);
+        if (start >= end) {
+            start = new Date(min);
+            end = new Date(max);
+        }
+        return { start: start, end: end, min: min, max: max };
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var container = document.getElementById('timeline');
+        if (!window.vis || !vis.Timeline) {
+            container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
+            return;
+        }
+        var groups = [];
+        var items = [];
+        var existingGroups = {};
+
+{% for assignment in timeline_assignments %}
+        var groupId = 'employee_{{ forloop.counter0 }}_{{ assignment.employee|slugify }}';
+        if (!existingGroups['{{ assignment.employee|escapejs }}']) {
+            groups.push({ id: groupId, content: '{{ assignment.employee|escapejs }}' });
+            existingGroups['{{ assignment.employee|escapejs }}'] = groupId;
+        }
+
+        items.push({
+            id: 'assignment_{{ forloop.counter0 }}',
+            group: existingGroups['{{ assignment.employee|escapejs }}'],
+            content: '{{ assignment.category|escapejs }}',
+            title: '<strong>{{ assignment.employee|escapejs }}</strong><br>{{ assignment.category|escapejs }}',
+            start: gpBuildDate({{ assignment.start|date:"Y" }}, {{ assignment.start|date:"n" }}, {{ assignment.start|date:"j" }}),
+            end: gpBuildDate({{ assignment.end|date:"Y" }}, {{ assignment.end|date:"n" }}, {{ assignment.end|date:"j" }})
+        });
+{% endfor %}
+
+        if (!items.length) {
+            container.innerHTML = '<p class="m-3">Keine Staffing-Daten vorhanden.</p>';
+            return;
+        }
+
+        var range = gpTimelineRange(items);
+        var windowRange = gpBuildWindow(range);
+        var monthSpan = gpMonthSpan(windowRange.min, windowRange.max);
+        container.style.minWidth = '100%';
+        container.style.height = 'auto';
+
+        if (window.vis && vis.moment && !window.__gpSingleLetterMonthsConfigured) {
+            vis.moment.updateLocale('de', {
+                monthsShort: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
+            });
+            window.__gpSingleLetterMonthsConfigured = true;
+        }
+
+        new vis.Timeline(container, items, groups, {
+            stack: false,
+            min: windowRange.min,
+            max: windowRange.max,
+            start: windowRange.start,
+            end: windowRange.end,
+            zoomable: true,
+            moveable: true,
+            horizontalScroll: true,
+            verticalScroll: false,
+            showCurrentTime: true,
+            zoomKey: 'ctrlKey',
+            margin: { item: { horizontal: 4, vertical: 6 }, axis: 6 },
+            groupHeightMode: 'fitItems',
+            autoResize: true,
+            height: null,
+            minHeight: 0,
+            orientation: { axis: 'bottom' },
+            locale: 'de',
+            timeAxis: { scale: 'month', step: 1 },
+            format: {
+                minorLabels: {
+                    month: 'MMM',
+                },
+                majorLabels: {
+                    month: 'YYYY',
+                },
+            },
+            tooltip: { followMouse: false, overflowMethod: 'flip' },
+        });
+    });
 </script>
-<div id="timeline" style="height: 500px;"></div>
+<div id="timeline_scroll" class="timeline-scroll">
+    <div id="timeline" class="timeline-shell"></div>
+</div>
 
 <h2>Personalbudgetmittel</h2>
 
@@ -117,9 +248,9 @@
         </tr>
     </thead>
     <tbody>
-    {% for staffing in budget.staff_assignments %}
+    {% for staffing in budget.staff_allocations %}
         <tr>
-            <td><a href="{% url 'staffing:details' staffing.assignment.employment.staff_member.id %}">{{ staffing.assignment.employment.staff_member }}</a><br/>({{ staffing.assignment.start_date }} - {{ staffing.assignment.end_date }})</td>
+            <td><a href="{% url 'staffing:details' staffing.allocation.employment.staff_member.id %}">{{ staffing.allocation.employment.staff_member }}</a><br/>({{ staffing.allocation.start_date }} - {{ staffing.allocation.end_date|default:staffing.allocation.employment.end_date }})</td>
             <td style="text-align: right;">€ {{ staffing.salary_sum }}</td>
         </tr>
     {% endfor %}

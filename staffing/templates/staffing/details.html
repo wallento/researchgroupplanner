@@ -23,6 +23,38 @@
             </tr>
             {% endfor %}
       </table>
+
+      <h4>Finanzierungszuordnungen</h4>
+      {% if employment.allocations %}
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+              <th>Quelle</th>
+              <th>Prozent</th>
+              <th>Zeitraum</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for allocation in employment.allocations %}
+              <tr>
+                <td>
+                  {% if allocation.budget_item_id %}
+                    Projekt {{ allocation.budget_item.project.acronym }} - {{ allocation.budget_item.title }}
+                  {% elif allocation.annual_pool_budget_id %}
+                    Annual Pool {{ allocation.annual_pool_budget.annual_pool.title }} ({{ allocation.annual_pool_budget.year }})
+                  {% else %}
+                    Landesstelle {{ allocation.landesstelle.title }}
+                  {% endif %}
+                </td>
+                <td>{{ allocation.percentage }}%</td>
+                <td>{{ allocation.start_date }} - {{ allocation.end_date|default:employment.end_date }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="text-muted">Keine Finanzierungszuordnungen hinterlegt.</p>
+      {% endif %}
     {% endfor %}
   </ul>
 {% endblock %}

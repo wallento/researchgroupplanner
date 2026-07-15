@@ -3,3 +3,9 @@ __pycache__
 *.pyc
 .envrc
 .direnv
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+controlling/static/vendor/
+staticfiles/

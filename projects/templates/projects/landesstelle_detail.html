@@ -1,0 +1,234 @@
+{% extends "controlling/base.html" %}
+{% load static %}
+
+{% block title %}{{ landesstelle.title }}{% endblock %}
+{% block heading %}{{ landesstelle.title }}{% endblock %}
+
+{% block content %}
+
+<table class="table table-bordered mt-3">
+    <tr>
+        <th>Institut:</th>
+        <td>{% if landesstelle.institute %}{{ landesstelle.institute.name }} ({{ landesstelle.institute.short_name }}){% else %}–{% endif %}</td>
+    </tr>
+    <tr>
+        <th>Wertigkeit:</th>
+        <td>{{ landesstelle.percentage }} %</td>
+    </tr>
+    <tr>
+        <th>Laufzeit:</th>
+        <td>
+            {{ landesstelle.start_date }}
+            {% if landesstelle.end_date %} – {{ landesstelle.end_date }}{% else %} (laufend){% endif %}
+        </td>
+    </tr>
+    {% if landesstelle.notes %}
+    <tr>
+        <th>Notizen:</th>
+        <td>{{ landesstelle.notes }}</td>
+    </tr>
+    {% endif %}
+</table>
+
+<h2>Staffing</h2>
+<link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
+<script src="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.js' %}"></script>
+
+<style>
+    .timeline-scroll {
+        border: 1px solid #d6d6d6;
+        border-radius: 8px;
+        background: #fff;
+        overflow-x: hidden;
+        overflow-y: visible;
+        box-sizing: border-box;
+        margin-bottom: 1rem;
+    }
+
+    .timeline-shell {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        min-width: 100%;
+        min-height: 0;
+    }
+
+    .timeline-shell .vis-timeline {
+        border: 0;
+    }
+
+    .vis-item .vis-item-content {
+        color: #ffffff !important;
+    }
+
+    .vis-time-axis .vis-text {
+        font-size: 0.75rem;
+    }
+
+    .vis-tooltip {
+        z-index: 2000;
+        max-height: none;
+        overflow: visible;
+    }
+</style>
+
+<script type="text/javascript">
+    function gpBuildDate(year, month, day) {
+        return new Date(year, month - 1, day);
+    }
+
+    function gpMonthSpan(start, end) {
+        return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    }
+
+    function gpTimelineRange(items) {
+        var min = null;
+        var max = null;
+        for (var i = 0; i < items.length; i++) {
+            var start = new Date(items[i].start);
+            var end = new Date(items[i].end);
+            if (!min || start < min) min = start;
+            if (!max || end > max) max = end;
+        }
+        return { min: min, max: max };
+    }
+
+    function gpBuildWindow(range) {
+        var now = new Date();
+        var desiredStart = new Date(now.getFullYear() - 3, 0, 1);
+        var desiredEnd = new Date(now.getFullYear() + 3, 11, 31);
+        var min = new Date(range.min.getFullYear(), range.min.getMonth() - 3, 1);
+        var max = new Date(range.max.getFullYear(), range.max.getMonth() + 4, 0);
+        if (desiredStart < min) min = new Date(desiredStart);
+        if (desiredEnd > max) max = new Date(desiredEnd);
+        var start = new Date(desiredStart);
+        var end = new Date(desiredEnd);
+        if (start < min) start = new Date(min);
+        if (end > max) end = new Date(max);
+        if (start >= end) {
+            start = new Date(min);
+            end = new Date(max);
+        }
+        return { start: start, end: end, min: min, max: max };
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var container = document.getElementById('timeline');
+        if (!window.vis || !vis.Timeline) {
+            container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
+            return;
+        }
+        var groups = [];
+        var items = [];
+        var existingGroups = {};
+
+{% for alloc in allocations %}
+        var groupKey = '{{ alloc.employment.staff_member|escapejs }}';
+        var groupId = existingGroups[groupKey];
+        if (!groupId) {
+            groupId = 'staff_{{ forloop.counter0 }}';
+            existingGroups[groupKey] = groupId;
+            groups.push({ id: groupId, content: groupKey });
+        }
+
+        var startDate = gpBuildDate({{ alloc.start_date|date:"Y" }}, {{ alloc.start_date|date:"n" }}, {{ alloc.start_date|date:"j" }});
+        var endDate = gpBuildDate({% if alloc.end_date %}{{ alloc.end_date|date:"Y" }}, {{ alloc.end_date|date:"n" }}, {{ alloc.end_date|date:"j" }}{% else %}2099, 12, 31{% endif %});
+
+        if (endDate <= startDate) {
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 1);
+        }
+
+        items.push({
+            id: 'allocation_{{ forloop.counter0 }}',
+            group: groupId,
+            content: '{{ alloc.percentage }}%',
+            title: '<strong>' + groupKey + '</strong><br>{{ alloc.percentage }}%<br>{{ alloc.start_date }} - {% if alloc.end_date %}{{ alloc.end_date }}{% else %}laufend{% endif %}',
+            start: startDate,
+            end: endDate
+        });
+{% endfor %}
+
+        if (!items.length) {
+            container.innerHTML = '<p class="m-3">Keine Mitarbeiterzuordnungen vorhanden.</p>';
+            return;
+        }
+
+        var range = gpTimelineRange(items);
+        var windowRange = gpBuildWindow(range);
+        var monthSpan = gpMonthSpan(windowRange.min, windowRange.max);
+        container.style.minWidth = '100%';
+        container.style.height = 'auto';
+
+        if (window.vis && vis.moment && !window.__gpSingleLetterMonthsConfigured) {
+            vis.moment.updateLocale('de', {
+                monthsShort: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
+            });
+            window.__gpSingleLetterMonthsConfigured = true;
+        }
+
+        new vis.Timeline(container, items, groups, {
+            stack: false,
+            min: windowRange.min,
+            max: windowRange.max,
+            start: windowRange.start,
+            end: windowRange.end,
+            zoomable: true,
+            moveable: true,
+            horizontalScroll: true,
+            verticalScroll: false,
+            showCurrentTime: true,
+            zoomKey: 'ctrlKey',
+            margin: { item: { horizontal: 4, vertical: 6 }, axis: 6 },
+            groupHeightMode: 'fitItems',
+            autoResize: true,
+            height: null,
+            minHeight: 0,
+            orientation: { axis: 'bottom' },
+            locale: 'de',
+            timeAxis: { scale: 'month', step: 1 },
+            format: {
+                minorLabels: {
+                    month: 'MMM',
+                },
+                majorLabels: {
+                    month: 'YYYY',
+                },
+            },
+            tooltip: { followMouse: false, overflowMethod: 'flip' },
+        });
+    });
+</script>
+<div id="timeline_scroll" class="timeline-scroll">
+    <div id="timeline" class="timeline-shell"></div>
+</div>
+
+<h2>Mitarbeiterzuordnungen</h2>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Mitarbeiter</th>
+            <th>Anteil</th>
+            <th>Von</th>
+            <th>Bis</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for alloc in allocations %}
+        <tr>
+            <td>
+                <a href="{% url 'staffing:details' alloc.employment.staff_member.id %}">
+                    {{ alloc.employment.staff_member }}
+                </a>
+            </td>
+            <td>{{ alloc.percentage }} %</td>
+            <td>{{ alloc.start_date }}</td>
+            <td>{% if alloc.end_date %}{{ alloc.end_date }}{% else %}laufend{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">Keine Mitarbeiter zugeordnet.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

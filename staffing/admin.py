@@ -1,23 +1,34 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import StaffMember, StaffAssignment, Employment, EmploymentSalaries
+from .models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
 
 class EmploymentInline(admin.StackedInline):
     model = Employment
     extra = 0
 
 class StaffMemberAdmin(admin.ModelAdmin):
+    list_display = ('get_full_name', 'email', 'is_leadership', 'status')
+    fields = ('first_name', 'last_name', 'email', 'is_leadership', 'status')
     inlines = [EmploymentInline]
+    
+    def get_full_name(self, obj):
+        return str(obj)
+    get_full_name.short_description = 'Name'
 
 admin.site.register(StaffMember, StaffMemberAdmin)
-admin.site.register(StaffAssignment)
 
 class EmploymentSalariesInline(admin.TabularInline):
     model = EmploymentSalaries
     extra = 0
 
+
+class StaffFundingAllocationInline(admin.TabularInline):
+    model = StaffFundingAllocation
+    extra = 0
+
 class EmploymentAdmin(admin.ModelAdmin):
-    inlines = [EmploymentSalariesInline]
+    inlines = [EmploymentSalariesInline, StaffFundingAllocationInline]
 
 admin.site.register(Employment, EmploymentAdmin)
+admin.site.register(StaffFundingAllocation)
