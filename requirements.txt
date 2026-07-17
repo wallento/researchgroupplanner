@@ -2,6 +2,7 @@ django
 django-browser-reload
 django-model-info
 django-bootstrap5
+django-crontab
 python-dateutil
 gunicorn
 whitenoise

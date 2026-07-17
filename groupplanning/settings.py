@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_bootstrap5',
+    'django_crontab',
 ]
 
 if DEBUG:
@@ -173,3 +174,10 @@ EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+
+# Cron Jobs Configuration
+# https://github.com/hartwork/django-crontab
+CRONJOBS = [
+    ('0 8 * * *', 'controlling.management.commands.send_notifications'),
+    ('* * * * *', 'controlling.management.commands.send_test_email'),
+]
