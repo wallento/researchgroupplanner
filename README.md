@@ -100,6 +100,7 @@ SAP_FINANZSTELLE=
 SAP_DATA_DIR=/data/sap
 SAP_BROWSER=firefox
 SAP_HEADLESS=1
+SAP_SYNC_CRON=0 5 * * *
 ```
 
 Die `.env` Datei zum `.gitignore` hinzufügen:
@@ -169,6 +170,14 @@ Die staff-geschützte Webansicht ist bei aktivierter Integration unter
 aktiven Fonds sowie Kontoauszüge mit getrennten Spalten für bezahlte Buchungen
 und grau markiertes Obligo. Fonds ohne Zeile im SAP-Budgetexport werden als
 „kein SAP-Budget“ dargestellt; für sie wird noch kein Restbetrag berechnet.
+
+Bei `SAP_ENABLED=1` wird außerdem ein täglicher SAP-Cronjob eingerichtet. Die
+Standardzeit ist 05:00 Uhr und kann über `SAP_SYNC_CRON` geändert werden. Da der
+Job `sync_sap` ohne `--year` aufruft, wird bei jeder Ausführung automatisch das
+aktuelle Geschäftsjahr in der konfigurierten Django-Zeitzone verwendet. Das
+Cron-Log liegt im Container unter `/tmp/cron_sap.log`. Nach Änderungen an
+Feature-Flag oder Zeitplan muss der Container neu gestartet werden, damit
+`django-crontab` den Eintrag neu anlegt.
 
 ## Email Notifications
 

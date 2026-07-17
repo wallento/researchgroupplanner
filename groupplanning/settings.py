@@ -197,6 +197,7 @@ SAP_BROWSER_BINARY = os.getenv('SAP_BROWSER_BINARY', '')
 SAP_HEADLESS = env_bool('SAP_HEADLESS', True)
 SAP_TIMEOUT = env_int('SAP_TIMEOUT', 60)
 SAP_ACTION_DELAY = env_float('SAP_ACTION_DELAY', 1.0)
+SAP_SYNC_CRON = os.getenv('SAP_SYNC_CRON', '0 5 * * *').strip()
 SAP_BACKEND = os.getenv(
     'SAP_BACKEND',
     'sap_integration.backends.wuerzburg.WuerzburgWebGUIBackend',
@@ -207,3 +208,14 @@ SAP_BACKEND = os.getenv(
 CRONJOBS = [
     ('0 8 * * *', 'django.core.management.call_command', ['send_notifications'], {}, '>> /tmp/cron_notifications.log 2>&1'),
 ]
+
+if SAP_ENABLED:
+    CRONJOBS.append(
+        (
+            SAP_SYNC_CRON,
+            'django.core.management.call_command',
+            ['sync_sap'],
+            {},
+            '>> /tmp/cron_sap.log 2>&1',
+        )
+    )
