@@ -6,3 +6,4 @@ django-crontab
 python-dateutil
 gunicorn
 whitenoise
+supervisor

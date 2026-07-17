@@ -11,5 +11,5 @@ python manage.py collectstatic --noinput
 apt-get update && apt-get install -y --no-install-recommends cron
 python manage.py crontab add
 
-# Start gunicorn in foreground
-exec gunicorn groupplanning.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers ${GUNICORN_WORKERS:-3} --timeout ${GUNICORN_TIMEOUT:-60}
+# Start supervisor to manage cron and gunicorn
+exec supervisord -c /app/supervisord.conf
