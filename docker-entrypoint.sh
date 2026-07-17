@@ -10,8 +10,8 @@ python manage.py collectstatic --noinput
 apt-get update && apt-get install -y --no-install-recommends cron procps
 mkdir -p /var/log
 cat > /tmp/crontab.txt << 'EOF'
-0 8 * * * cd /app && python manage.py send_notifications >> /var/log/send_notifications.log 2>&1
-* * * * * cd /app && python manage.py send_test_email >> /var/log/send_test_email.log 2>&1
+0 8 * * * cd /app && /usr/local/bin/python manage.py send_notifications >> /var/log/send_notifications.log 2>&1
+* * * * * cd /app && /usr/local/bin/python manage.py send_test_email >> /var/log/send_test_email.log 2>&1
 EOF
 crontab /tmp/crontab.txt
 # Start cron in background
