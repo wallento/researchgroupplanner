@@ -179,5 +179,4 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
 # https://github.com/hartwork/django-crontab
 CRONJOBS = [
     ('0 8 * * *', 'django.core.management.call_command', ['send_notifications'], {}, '>> /tmp/cron_notifications.log 2>&1'),
-    ('* * * * *', 'django.core.management.call_command', ['send_test_email'], {}, '>> /tmp/cron_test_email.log 2>&1'),
 ]
