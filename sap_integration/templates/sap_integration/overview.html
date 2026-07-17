@@ -1,0 +1,76 @@
+{% extends "controlling/base.html" %}
+{% load l10n %}
+
+{% block title %}Ist-Stand{% endblock %}
+{% block heading %}Ist-Stand{% endblock %}
+
+{% block content %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div class="btn-group" role="group" aria-label="Geschäftsjahr auswählen">
+            {% for year in years %}
+                <a class="btn {% if year == selected_year %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{% url 'sap_integration:overview_year' year %}">{{ year }}</a>
+            {% empty %}
+                <span class="text-muted">Noch keine Geschäftsjahre aufbereitet</span>
+            {% endfor %}
+        </div>
+        {% if generated_at %}
+            <small class="text-muted">Stand: {{ generated_at|date:"d.m.Y H:i" }} Uhr</small>
+        {% endif %}
+    </div>
+
+    {% if cache_error %}
+        <div class="alert alert-warning">{{ cache_error }}</div>
+    {% elif selected_year %}
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Projekt / Pool</th>
+                        <th>Fonds</th>
+                        <th class="text-end">Budget</th>
+                        <th class="text-end">Bezahlt</th>
+                        <th class="text-end">Obligo</th>
+                        <th class="text-end">Ist + Obligo</th>
+                        <th class="text-end">Rest</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td>
+                                <a class="fw-semibold text-decoration-none"
+                                   href="{% url 'sap_integration:fund_detail' selected_year row.fund.id %}">{{ row.owner }}</a>
+                                <div><span class="badge text-bg-secondary">{{ row.owner_type }}</span></div>
+                            </td>
+                            <td>
+                                <a href="{% url 'sap_integration:fund_detail' selected_year row.fund.id %}">{{ row.fund.fund_number }}</a>
+                                {% if row.fund.label %}<div class="small text-muted">{{ row.fund.label }}</div>{% endif %}
+                            </td>
+                            {% if row.values %}
+                                <td class="text-end">
+                                    {% if row.values.has_budget %}{{ row.values.budget|floatformat:"2g" }} €{% else %}<span class="text-muted">kein SAP-Budget</span>{% endif %}
+                                </td>
+                                <td class="text-end">{{ row.values.actual_total|floatformat:"2g" }} €</td>
+                                <td class="text-end table-secondary">{{ row.values.commitments_total|floatformat:"2g" }} €</td>
+                                <td class="text-end fw-semibold">{{ row.values.combined_total|floatformat:"2g" }} €</td>
+                                <td class="text-end">
+                                    {% if row.values.remaining is not None %}{{ row.values.remaining|floatformat:"2g" }} €{% else %}<span class="text-muted">–</span>{% endif %}
+                                </td>
+                            {% else %}
+                                <td colspan="5" class="text-center text-muted">Keine Daten in diesem Export</td>
+                            {% endif %}
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="7" class="text-center text-muted">Keine aktiven SAP-Fonds konfiguriert.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted">Grau hinterlegte Beträge sind Obligo und damit noch nicht zahlungswirksam.</p>
+    {% else %}
+        <div class="alert alert-secondary">
+            Führe zuerst <code>python manage.py parse_sap --year {% now "Y" %}</code> aus.
+        </div>
+    {% endif %}
+{% endblock %}

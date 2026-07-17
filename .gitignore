@@ -2,6 +2,9 @@ db.sqlite3
 __pycache__
 *.pyc
 .envrc
+.env
+.env.*
+!.env.example
 .direnv
 node_modules/
 npm-debug.log*
@@ -9,3 +12,4 @@ yarn-debug.log*
 yarn-error.log*
 controlling/static/vendor/
 staticfiles/
+sap_data/

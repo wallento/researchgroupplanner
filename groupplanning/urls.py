@@ -29,6 +29,7 @@ urlpatterns = [
     path("annual-pools/", controlling_annual_pools, name="annual_pools"),
     path("staffing/", include("staffing.urls")),
     path("projects/", include("projects.urls")),
+    path("ist-stand/", include("sap_integration.urls")),
     path("admin/", admin.site.urls),
 ]
 

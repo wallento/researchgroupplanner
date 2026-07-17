@@ -90,6 +90,16 @@ EMAIL_USE_SSL=0
 EMAIL_HOST_USER=
 EMAIL_HOST_PASSWORD=geheimes-passwort
 DEFAULT_FROM_EMAIL=noreply@example.com
+
+# SAP WebGUI integration (optional)
+SAP_ENABLED=0
+SAP_URL=https://sap.example.com/sap/bc/gui/sap/its/webgui
+SAP_USER=
+SAP_PASSWORD=
+SAP_FINANZSTELLE=
+SAP_DATA_DIR=/data/sap
+SAP_BROWSER=firefox
+SAP_HEADLESS=1
 ```
 
 Die `.env` Datei zum `.gitignore` hinzufügen:
@@ -112,6 +122,53 @@ docker compose exec web python manage.py createsuperuser
 ```
 
 The user is stored in the database and does not need to be recreated on every restart.
+
+## SAP WebGUI Integration
+
+Die SAP-Anbindung ist standardmäßig deaktiviert. Für einen manuellen Test müssen
+`SAP_ENABLED=1` sowie URL, Benutzer, Passwort und Finanzstelle gesetzt sein. Die
+Zugangsdaten werden ausschließlich aus der Umgebung gelesen und weder in Django
+noch in den Download-Metadaten gespeichert.
+
+Der aktuell integrierte WebGUI-Adapter entspricht dem als Referenz verwendeten
+Würzburger SAP-Ablauf. Andere Installationen können später über `SAP_BACKEND`
+einen eigenen Adapter konfigurieren.
+
+Ein manueller Abruf für das aktuelle Geschäftsjahr wird so gestartet:
+
+```shell
+python manage.py sync_sap
+```
+
+Ein anderes Jahr kann explizit angegeben werden:
+
+```shell
+python manage.py sync_sap --year 2025
+```
+
+Der Befehl lädt Budget, Ist und Obligo nach
+`$SAP_DATA_DIR/raw/<Jahr>/` und aktualisiert anschließend atomar die Datei
+`$SAP_DATA_DIR/last_download.json`. Im Docker-Image werden Firefox ESR und
+Geckodriver mitgeliefert. Lokal kann alternativ Chrome mit `SAP_BROWSER=chrome`
+verwendet werden; Selenium verwaltet den passenden Treiber dann beim ersten
+Start.
+
+Bereits heruntergeladene Exporte können ohne erneuten SAP-Zugriff verarbeitet
+werden:
+
+```shell
+python manage.py parse_sap --year 2026
+```
+
+Dabei entsteht unter `$SAP_DATA_DIR/processed/<Jahr>.json` ein atomar
+aktualisierter Web-Cache. Er enthält nur die aktiven, im Django-Admin
+konfigurierten Fonds. Buchungen werden nicht in der Django-Datenbank gespeichert.
+
+Die staff-geschützte Webansicht ist bei aktivierter Integration unter
+`/ist-stand/` erreichbar. Sie bietet eine Jahresauswahl, eine Übersicht aller
+aktiven Fonds sowie Kontoauszüge mit getrennten Spalten für bezahlte Buchungen
+und grau markiertes Obligo. Fonds ohne Zeile im SAP-Budgetexport werden als
+„kein SAP-Budget“ dargestellt; für sie wird noch kein Restbetrag berechnet.
 
 ## Email Notifications
 

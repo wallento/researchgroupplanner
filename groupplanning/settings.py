@@ -28,6 +28,14 @@ def env_list(name, default=None):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def env_int(name, default):
+    return int(os.getenv(name, str(default)))
+
+
+def env_float(name, default):
+    return float(os.getenv(name, str(default)))
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -47,6 +55,7 @@ INSTALLED_APPS = [
     'controlling.apps.ControllingConfig',
     'projects.apps.ProjectsConfig',
     'staffing.apps.StaffingConfig',
+    'sap_integration.apps.SAPIntegrationConfig',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -89,6 +98,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'sap_integration.context_processors.sap_feature',
             ],
         },
     },
@@ -174,6 +184,23 @@ EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+
+# Optional SAP WebGUI integration. Credentials are only read by the sync command.
+SAP_ENABLED = env_bool('SAP_ENABLED', False)
+SAP_URL = os.getenv('SAP_URL', '')
+SAP_USER = os.getenv('SAP_USER', '')
+SAP_PASSWORD = os.getenv('SAP_PASSWORD', '')
+SAP_FINANZSTELLE = os.getenv('SAP_FINANZSTELLE', '')
+SAP_DATA_DIR = Path(os.getenv('SAP_DATA_DIR', BASE_DIR / 'sap_data'))
+SAP_BROWSER = os.getenv('SAP_BROWSER', 'firefox')
+SAP_BROWSER_BINARY = os.getenv('SAP_BROWSER_BINARY', '')
+SAP_HEADLESS = env_bool('SAP_HEADLESS', True)
+SAP_TIMEOUT = env_int('SAP_TIMEOUT', 60)
+SAP_ACTION_DELAY = env_float('SAP_ACTION_DELAY', 1.0)
+SAP_BACKEND = os.getenv(
+    'SAP_BACKEND',
+    'sap_integration.backends.wuerzburg.WuerzburgWebGUIBackend',
+)
 
 # Cron Jobs Configuration
 # https://github.com/hartwork/django-crontab

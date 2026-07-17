@@ -96,6 +96,13 @@
                             Annual Pools
                         </a>
                     </li>
+                    {% if sap_enabled and user.is_staff %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'sap_integration:overview' %}">
+                                Ist-Stand
+                            </a>
+                        </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'warnings' %}">
                             Warnungen
