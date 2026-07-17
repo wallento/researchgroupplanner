@@ -62,26 +62,41 @@ Example for a `docker-compose.yml` behind Traefik:
 services:
 	web:
 		image: ghcr.io/myzinsky/researchgroupplanner:latest
-		environment:
-			DJANGO_SECRET_KEY: "change-me"
-			DJANGO_DEBUG: "0"
-			DJANGO_ALLOWED_HOSTS: "example.com"
-			DJANGO_CSRF_TRUSTED_ORIGINS: "https://example.com"
-			DJANGO_DB_NAME: /data/db.sqlite3
-			# Email notifications (optional)
-			EMAIL_BACKEND: "django.core.mail.backends.smtp.EmailBackend"
-			EMAIL_HOST: "smtp.example.com"
-			EMAIL_PORT: "25"
-			EMAIL_USE_TLS: "0"
-			EMAIL_USE_SSL: "0"
-			EMAIL_HOST_USER: ""
-			EMAIL_HOST_PASSWORD: ""
-			DEFAULT_FROM_EMAIL: "noreply@example.com"
+		env_file:
+			- .env          # Secrets nie in docker-compose.yml eintragen!
 		volumes:
 			- ./data:/data
 		expose:
 			- "8000"
+```
 
+Alle Konfigurationswerte kommen aus einer `.env` Datei auf dem Server
+(niemals ins Git einchecken!):
+
+```shell
+# .env
+DJANGO_SECRET_KEY=change-me
+DJANGO_DEBUG=0
+DJANGO_ALLOWED_HOSTS=example.com
+DJANGO_CSRF_TRUSTED_ORIGINS=https://example.com
+DJANGO_DB_NAME=/data/db.sqlite3
+
+# Email notifications (optional)
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=25
+EMAIL_USE_TLS=0
+EMAIL_USE_SSL=0
+EMAIL_HOST_USER=
+EMAIL_HOST_PASSWORD=geheimes-passwort
+DEFAULT_FROM_EMAIL=noreply@example.com
+```
+
+Die `.env` Datei zum `.gitignore` hinzufügen:
+
+```shell
+echo ".env" >> .gitignore
+chmod 600 .env
 ```
 
 You can generate a production secret key for `DJANGO_SECRET_KEY` like this:

@@ -7,6 +7,9 @@ python manage.py makemigrations --noinput
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
+printenv > /etc/environment
+chmod 600 /etc/environment
+
 # Setup django-crontab
 apt-get update && apt-get install -y --no-install-recommends cron
 python manage.py crontab add
