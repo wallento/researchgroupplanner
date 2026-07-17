@@ -13,3 +13,4 @@ yarn-error.log*
 controlling/static/vendor/
 staticfiles/
 sap_data/
+.DS_Store
