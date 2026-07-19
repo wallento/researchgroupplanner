@@ -22,6 +22,12 @@
         <th>Budget:</th>
         <td>€&nbsp;{{ project.budget_total }} (€&nbsp;{{ allocated_sum }} allokiert, €&nbsp;{{ remain_sum }} nicht allokiert)</td>
     </tr>
+    {% if project.no_overhead %}
+    <tr>
+        <th>Overhead:</th>
+        <td><span class="text-muted">Kein Overhead</span></td>
+    </tr>
+    {% endif %}
 </table>
 
 <h2>Budgetposten</h2>

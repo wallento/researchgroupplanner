@@ -183,7 +183,7 @@ def warnings(request):
                 "link": f"/projects/details/{project.acronym}/",
             })
 
-        if project.overheadbudgetitem_set.count() == 0:
+        if project.overheadbudgetitem_set.count() == 0 and not project.no_overhead:
             warnings_list.append({
                 "severity": "warning",
                 "title": f"Projekt ohne Overheadposition: {project.acronym}",

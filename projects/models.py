@@ -17,6 +17,7 @@ class Project(models.Model):
     end_date = models.DateField()
     extension_planning_date = models.DateField(blank=True, null=True)
     budget_total = models.DecimalField(max_digits=10, decimal_places=2)
+    no_overhead = models.BooleanField(default=False, verbose_name="Kein Overhead")
 
     def clean(self):
         super().clean()
