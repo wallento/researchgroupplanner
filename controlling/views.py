@@ -617,7 +617,7 @@ def main(request):
 
     landesstellen = Landesstelle.objects.all().order_by('start_date') if settings.LANDESSTELLEN_ENABLED else Landesstelle.objects.none()
 
-    employments = Employment.objects.select_related('staff_member').prefetch_related(
+    employments = Employment.objects.exclude(staff_member__status='alumni').select_related('staff_member').prefetch_related(
         'stafffundingallocation_set__budget_item__project',
         'stafffundingallocation_set__landesstelle__institute',
         'stafffundingallocation_set__annual_pool_budget__annual_pool',
