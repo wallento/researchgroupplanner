@@ -655,30 +655,32 @@
     </tbody>
 </table>
 
-<h2 class="mt-2">Landesstellen</h2>
+{% if LANDESSTELLEN_ENABLED %}
+    <h2 class="mt-2">Landesstellen</h2>
 
-<table class="table">
-    <thead>
-        <tr>
-            <th scope="col"></th>
-            <th scope="col">Institut</th>
-            <th scope="col">Wertigkeit</th>
-            <th scope="col">Ab</th>
-            <th scope="col">Bis</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for ls in landesstellen %}
+    <table class="table">
+        <thead>
             <tr>
-                <th scope="row"><a href="{% url 'projects:landesstelle_detail' ls.id %}">{{ ls.title }}</a></th>
-                <td>{% if ls.institute %}{{ ls.institute.short_name }}{% else %}–{% endif %}</td>
-                <td>{{ ls.percentage }} %</td>
-                <td>{{ ls.start_date }}</td>
-                <td>{% if ls.end_date %}{{ ls.end_date }}{% else %}laufend{% endif %}</td>
+                <th scope="col"></th>
+                <th scope="col">Institut</th>
+                <th scope="col">Wertigkeit</th>
+                <th scope="col">Ab</th>
+                <th scope="col">Bis</th>
             </tr>
-        {% empty %}
-            <tr><td colspan="5">Keine Landesstellen hinterlegt.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            {% for ls in landesstellen %}
+                <tr>
+                    <th scope="row"><a href="{% url 'projects:landesstelle_detail' ls.id %}">{{ ls.title }}</a></th>
+                    <td>{% if ls.institute %}{{ ls.institute.short_name }}{% else %}–{% endif %}</td>
+                    <td>{{ ls.percentage }} %</td>
+                    <td>{{ ls.start_date }}</td>
+                    <td>{% if ls.end_date %}{{ ls.end_date }}{% else %}laufend{% endif %}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5">Keine Landesstellen hinterlegt.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endif %}
 {% endblock %}

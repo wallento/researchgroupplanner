@@ -181,3 +181,9 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
 # and other institutes. Some deployments only ever have a single
 # institute, so the split (and its UI) can be disabled entirely.
 OVERHEAD_SPLIT_ENABLED = env_bool('OVERHEAD_SPLIT_ENABLED', True)
+
+# Whether the Landesstellen and Annual Pools funding-source features are
+# used. Some deployments don't need them, so their navigation, UI
+# sections, and related warnings can be disabled entirely.
+LANDESSTELLEN_ENABLED = env_bool('LANDESSTELLEN_ENABLED', True)
+ANNUAL_POOLS_ENABLED = env_bool('ANNUAL_POOLS_ENABLED', True)

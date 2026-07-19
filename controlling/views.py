@@ -348,7 +348,7 @@ def warnings(request):
                         ),
                         "link": f"/projects/details/{project.acronym}/",
                     })
-            elif allocation.landesstelle_id:
+            elif allocation.landesstelle_id and settings.LANDESSTELLEN_ENABLED:
                 ls = allocation.landesstelle
                 if allocation.start_date < ls.start_date:
                     warnings_list.append({
@@ -368,7 +368,7 @@ def warnings(request):
                         ),
                         "link": f"/projects/landesstelle/{ls.id}/",
                     })
-            elif allocation.annual_pool_budget_id:
+            elif allocation.annual_pool_budget_id and settings.ANNUAL_POOLS_ENABLED:
                 pool_budget = allocation.annual_pool_budget
                 if allocation.start_date.year != pool_budget.year or alloc_end.year != pool_budget.year:
                     warnings_list.append({
@@ -615,7 +615,7 @@ def main(request):
     for key, value in budgets_per_year.items():
         budgets_per_year[key]["total"] = sum(value.values())
 
-    landesstellen = Landesstelle.objects.all().order_by('start_date')
+    landesstellen = Landesstelle.objects.all().order_by('start_date') if settings.LANDESSTELLEN_ENABLED else Landesstelle.objects.none()
 
     employments = Employment.objects.select_related('staff_member').prefetch_related(
         'stafffundingallocation_set__budget_item__project',

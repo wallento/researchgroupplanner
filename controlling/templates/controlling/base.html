@@ -81,21 +81,25 @@
                             Mitarbeiter
                         </a>
                     </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownLandesstellen" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                            Landesstellen
-                        </a>
-                        <div class="dropdown-menu" aria-labelledby="navbarDropdownLandesstellen">
-                            {% for ls in group_landesstellen %}
-                                <a class="dropdown-item" href="{% url 'projects:landesstelle_detail' ls.id %}">{{ ls }}</a>
-                            {% endfor %}
-                        </div>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'annual_pools' %}">
-                            Annual Pools
-                        </a>
-                    </li>
+                    {% if LANDESSTELLEN_ENABLED %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownLandesstellen" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Landesstellen
+                            </a>
+                            <div class="dropdown-menu" aria-labelledby="navbarDropdownLandesstellen">
+                                {% for ls in group_landesstellen %}
+                                    <a class="dropdown-item" href="{% url 'projects:landesstelle_detail' ls.id %}">{{ ls }}</a>
+                                {% endfor %}
+                            </div>
+                        </li>
+                    {% endif %}
+                    {% if ANNUAL_POOLS_ENABLED %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'annual_pools' %}">
+                                Annual Pools
+                            </a>
+                        </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'warnings' %}">
                             Warnungen
