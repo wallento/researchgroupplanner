@@ -10,6 +10,7 @@
     <li>
         <a href="{% url 'projects:details' project.acronym %}">{{ project.acronym }}</a>
         ({{ project.start_date }} - {% if project.extension_planning_date %}{{ project.extension_planning_date }}{% else %}{{ project.end_date }}{% endif %})
+        [<a href="{% url 'projects:details' project.acronym %}#timeline">Timeline</a>]
     </li>
 {% empty %}
     <li>Keine laufenden Projekte.</li>
@@ -22,6 +23,7 @@
     <li>
         <a href="{% url 'projects:details' project.acronym %}">{{ project.acronym }}</a>
         ({{ project.start_date }} - {% if project.extension_planning_date %}{{ project.extension_planning_date }}{% else %}{{ project.end_date }}{% endif %})
+        [<a href="{% url 'projects:details' project.acronym %}#timeline">Timeline</a>]
     </li>
 {% empty %}
     <li>Keine abgeschlossenen Projekte.</li>
