@@ -29,15 +29,15 @@
                         <br><span class="text-muted">kostenneutrale Verlängerung bis {{ project.extension_planning_date }}</span>
                     {% endif %}
                 </td>
-                <td>€ {{ project.budget_total }}</td>
+                <td>€&nbsp;{{ project.budget_total }}</td>
                 <td>
                     {% for budget in project.staffbudgetitem_set.all %}
-                        <div>{{ budget.short_title }}: € {{ budget.amount }}</div>
+                        <div>{{ budget.short_title }}: €&nbsp;{{ budget.amount }}</div>
                     {% endfor %}
                 </td>
                 <td>
                     {% for budget in project.otherbudgetitem_set.all %}
-                        <div>{{ budget.short_title }}: € {{ budget.amount }}</div>
+                        <div>{{ budget.short_title }}: €&nbsp;{{ budget.amount }}</div>
                     {% endfor %}
                 </td>
                 <td>
@@ -647,7 +647,7 @@
             <tr>
                 <th scope="col">allokiert</th>
                 {% for year, data in budgets_per_year.items %}
-                    <td>€ {{ data.total }}</td>
+                    <td>€&nbsp;{{ data.total }}</td>
                 {% endfor %}
             </tr>
     </tbody>

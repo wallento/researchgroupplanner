@@ -30,9 +30,9 @@
                                 {% for row in entry.rows %}
                                     <tr>
                                         <td>{{ row.year }}</td>
-                                        <td>€ {{ row.assigned }}</td>
-                                        <td>€ {{ row.spent }}</td>
-                                        <td>€ {{ row.remaining }}</td>
+                                        <td>€&nbsp;{{ row.assigned }}</td>
+                                        <td>€&nbsp;{{ row.spent }}</td>
+                                        <td>€&nbsp;{{ row.remaining }}</td>
                                         <td>{{ row.utilization }}%</td>
                                         <td>
                                             {% if row.linked_staff %}
@@ -49,9 +49,9 @@
                             <tfoot>
                                 <tr>
                                     <th>Gesamt</th>
-                                    <th>€ {{ entry.total_assigned }}</th>
-                                    <th>€ {{ entry.total_spent }}</th>
-                                    <th>€ {{ entry.total_remaining }}</th>
+                                    <th>€&nbsp;{{ entry.total_assigned }}</th>
+                                    <th>€&nbsp;{{ entry.total_spent }}</th>
+                                    <th>€&nbsp;{{ entry.total_remaining }}</th>
                                     <th></th>
                                     <th></th>
                                 </tr>

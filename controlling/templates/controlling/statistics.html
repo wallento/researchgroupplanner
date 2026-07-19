@@ -9,7 +9,7 @@
 
 <div class="alert alert-success" role="alert">
     <strong>Kumulierte Drittmittel (Gesamtdatenbank):</strong>
-    € {{ statistics_total_third_party_funds }}
+    €&nbsp;{{ statistics_total_third_party_funds }}
 </div>
 
 <div class="card mb-4">
@@ -143,7 +143,7 @@
                         callbacks: {
                             label: function (context) {
                                 var value = Number(context.raw || 0);
-                                return context.dataset.label + ': € ' + value.toLocaleString('de-DE', {
+                                return context.dataset.label + ': € ' + value.toLocaleString('de-DE', {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2
                                 });
@@ -156,7 +156,7 @@
                         beginAtZero: true,
                         ticks: {
                             callback: function (value) {
-                                return '€ ' + Number(value).toLocaleString('de-DE');
+                                return '€ ' + Number(value).toLocaleString('de-DE');
                             }
                         }
                     }

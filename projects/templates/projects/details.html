@@ -20,7 +20,7 @@
     </tr>
     <tr>
         <th>Budget:</th>
-        <td>€ {{ project.budget_total }} (€ {{ allocated_sum }} allokiert, € {{ remain_sum }} nicht allokiert)</td>
+        <td>€&nbsp;{{ project.budget_total }} (€&nbsp;{{ allocated_sum }} allokiert, €&nbsp;{{ remain_sum }} nicht allokiert)</td>
     </tr>
 </table>
 
@@ -45,23 +45,23 @@
         {% for budget in staff_budget_items %}
             <tr>
                 <td>{{ budget.title }}</td>
-                <td>€ {{ budget.amount }}</td>
+                <td>€&nbsp;{{ budget.amount }}</td>
                 {% for year, amount in budget.years.items %}
-                    <td>€ {{ amount }}</td>
+                    <td>€&nbsp;{{ amount }}</td>
                 {% endfor %}
-                <td>€ {{ budget.projected_sum }}</td>
-                <td>€ {{ budget.remain }}</td>
+                <td>€&nbsp;{{ budget.projected_sum }}</td>
+                <td>€&nbsp;{{ budget.remain }}</td>
             </tr>
         {% endfor %}
         {% for budget in other_budget_items %}
             <tr>
                 <td>{{ budget.title }}</td>
-                <td>€ {{ budget.amount }}</td>
+                <td>€&nbsp;{{ budget.amount }}</td>
                 {% for year, amount in budget.years.items %}
-                    <td>€ {{ amount }}</td>
+                    <td>€&nbsp;{{ amount }}</td>
                 {% endfor %}
-                <td>€ {{ budget.projected_sum }}</td>
-                <td>€ {{ budget.remain }}</td>
+                <td>€&nbsp;{{ budget.projected_sum }}</td>
+                <td>€&nbsp;{{ budget.remain }}</td>
             </tr>
         {% endfor %}
     </tbody>
@@ -244,19 +244,19 @@
     <thead>
         <tr>
             <th>Budget:</th>
-            <th style="text-align: right;">€ {{ budget.amount }}</th>
+            <th style="text-align: right;">€&nbsp;{{ budget.amount }}</th>
         </tr>
     </thead>
     <tbody>
     {% for staffing in budget.staff_allocations %}
         <tr>
             <td><a href="{% url 'staffing:details' staffing.allocation.employment.staff_member.id %}">{{ staffing.allocation.employment.staff_member }}</a><br/>({{ staffing.allocation.start_date }} - {{ staffing.allocation.end_date|default:staffing.allocation.employment.end_date }})</td>
-            <td style="text-align: right;">€ {{ staffing.salary_sum }}</td>
+            <td style="text-align: right;">€&nbsp;{{ staffing.salary_sum }}</td>
         </tr>
     {% endfor %}
         <tr>
             <td><strong>Summe:</strong></td>
-            <td style="text-align: right;">€ {{ budget.projected_sum }}<br>(nicht allokiert: € {{ budget.remain }})</td>
+            <td style="text-align: right;">€&nbsp;{{ budget.projected_sum }}<br>(nicht allokiert: €&nbsp;{{ budget.remain }})</td>
         </tr>
     </tbody>
 </table>

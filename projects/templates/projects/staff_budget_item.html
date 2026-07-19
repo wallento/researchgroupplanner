@@ -19,7 +19,7 @@
         <tr>
             <td>{{ month }}</td>
             {% for staff_member in table_assignments.0 %}
-                <td>{% for salary in salaries.items %}{% if salary.0 == staff_member %} € {{ salary.1 }}{% endif %}{% endfor %}</td>
+                <td>{% for salary in salaries.items %}{% if salary.0 == staff_member %} €&nbsp;{{ salary.1 }}{% endif %}{% endfor %}</td>
             {% endfor %}
         </tr>
     {% endfor %}
