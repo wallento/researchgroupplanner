@@ -15,6 +15,12 @@
                         <h5 class="mb-1">{{ warning.title }}</h5>
                         <p class="mb-1">{{ warning.detail }}</p>
                         <a href="{{ warning.link }}">Öffnen</a>
+                        {% if warning.merge_salary_ids %}
+                            <form method="post" action="{% url 'merge_salary_overlap' warning.merge_salary_ids.0 warning.merge_salary_ids.1 %}" class="d-inline ms-2" onsubmit="return confirm('Überlappende Gehaltssätze zusammenführen? Die betroffenen Einträge werden ersetzt.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Zusammenführen</button>
+                            </form>
+                        {% endif %}
                     </div>
                     <span class="badge text-bg-{% if warning.severity == 'danger' %}danger{% elif warning.severity == 'warning' %}warning{% elif warning.severity == 'success' %}success{% else %}secondary{% endif %}">
                         {{ warning.severity|upper }}

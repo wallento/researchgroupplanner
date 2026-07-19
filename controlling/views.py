@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
 from .utils import render
 from dateutil.relativedelta import relativedelta
 
@@ -8,11 +8,14 @@ from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocati
 from staffing.utils import get_salaries_by_month
 from django.conf import settings
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.core.mail import send_mail
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import get_object_or_404, redirect
+from django.views.decorators.http import require_POST
 from django.db.models import Sum
 
 from projects.utils import calculate_salary_for_allocation
@@ -246,14 +249,18 @@ def warnings(request):
             current = salaries[i]
             following = salaries[i + 1]
             if following.start_date <= current.end_date:
+                overlap_start = following.start_date
+                overlap_end = min(current.end_date, following.end_date)
                 warnings_list.append({
                     "severity": "warning",
                     "title": f"Überlappende Gehaltssätze: {employment.staff_member}",
                     "detail": (
-                        f"Gehalt {current.start_date} - {current.end_date} überlappt mit "
-                        f"{following.start_date} - {following.end_date}."
+                        f"Gehalt {current.start_date} - {current.end_date} ({current.salary} €) überlappt mit "
+                        f"{following.start_date} - {following.end_date} ({following.salary} €) "
+                        f"im Zeitraum {overlap_start} - {overlap_end}."
                     ),
                     "link": f"/staffing/details/{employment.staff_member.id}/",
+                    "merge_salary_ids": (current.id, following.id),
                 })
 
     employments = Employment.objects.select_related("staff_member").prefetch_related(
@@ -404,6 +411,60 @@ def warnings(request):
     return render(request, "controlling/warnings.html", {
         "warnings_list": warnings_list,
     })
+
+
+@login_required
+@require_POST
+def merge_salary_overlap(request, current_id, following_id):
+    current = get_object_or_404(EmploymentSalaries, pk=current_id)
+    following = get_object_or_404(EmploymentSalaries, pk=following_id)
+
+    if current.employment_id != following.employment_id:
+        return redirect("warnings")
+
+    if following.start_date > current.end_date:
+        # No longer overlapping (already resolved) - nothing to do.
+        return redirect("warnings")
+
+    employment = current.employment
+    overlap_start = following.start_date
+    overlap_end = min(current.end_date, following.end_date)
+
+    new_salaries = []
+
+    if current.start_date < overlap_start:
+        new_salaries.append({
+            "start_date": current.start_date,
+            "end_date": overlap_start - timedelta(days=1),
+            "salary": current.salary,
+        })
+
+    new_salaries.append({
+        "start_date": overlap_start,
+        "end_date": overlap_end,
+        "salary": current.salary + following.salary,
+    })
+
+    if current.end_date > overlap_end:
+        new_salaries.append({
+            "start_date": overlap_end + timedelta(days=1),
+            "end_date": current.end_date,
+            "salary": current.salary,
+        })
+    elif following.end_date > overlap_end:
+        new_salaries.append({
+            "start_date": overlap_end + timedelta(days=1),
+            "end_date": following.end_date,
+            "salary": following.salary,
+        })
+
+    with transaction.atomic():
+        current.delete()
+        following.delete()
+        for entry in new_salaries:
+            EmploymentSalaries.objects.create(employment=employment, **entry)
+
+    return redirect("warnings")
 
 
 def statistics(request):

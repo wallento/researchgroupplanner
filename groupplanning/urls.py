@@ -20,7 +20,7 @@ from django.conf import settings
 from django.urls import include, path
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 
-from controlling.views import annual_pools as controlling_annual_pools, main as controlling_main, warnings as controlling_warnings, statistics as controlling_statistics, send_test_email
+from controlling.views import annual_pools as controlling_annual_pools, main as controlling_main, warnings as controlling_warnings, statistics as controlling_statistics, send_test_email, merge_salary_overlap as controlling_merge_salary_overlap
 
 urlpatterns = [
     path(
@@ -34,6 +34,11 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", controlling_main, name="main"),
     path("warnings/", controlling_warnings, name="warnings"),
+    path(
+        "warnings/merge-salary-overlap/<int:current_id>/<int:following_id>/",
+        controlling_merge_salary_overlap,
+        name="merge_salary_overlap",
+    ),
     path("statistics/", controlling_statistics, name="statistics"),
     path("send-test-email/", send_test_email, name="send_test_email"),
     path("annual-pools/", controlling_annual_pools, name="annual_pools"),
