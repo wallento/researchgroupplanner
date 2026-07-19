@@ -146,6 +146,11 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Deployment-specific static files (e.g. a custom BRAND_LOGO) that
+# shouldn't live in the tracked app code. Gitignored; each deployment
+# drops its own files in here.
+STATICFILES_DIRS = [BASE_DIR / 'branding']
+
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
