@@ -187,3 +187,9 @@ OVERHEAD_SPLIT_ENABLED = env_bool('OVERHEAD_SPLIT_ENABLED', True)
 # sections, and related warnings can be disabled entirely.
 LANDESSTELLEN_ENABLED = env_bool('LANDESSTELLEN_ENABLED', True)
 ANNUAL_POOLS_ENABLED = env_bool('ANNUAL_POOLS_ENABLED', True)
+
+# Static-file path (relative to a static dir) of the logo shown in the
+# navbar. Deployments can swap in their own branding by dropping a file
+# under static/ and pointing this at it. Set to an empty string to hide
+# the logo entirely.
+BRAND_LOGO = os.getenv('BRAND_LOGO', 'controlling/img/Symbol_White.svg')
