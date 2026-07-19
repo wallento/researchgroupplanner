@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
@@ -101,12 +102,16 @@ class OverheadBudgetItem(models.Model):
 
     def available_amount(self):
         """Sum of shares belonging to institutes marked as own chair."""
+        if not settings.OVERHEAD_SPLIT_ENABLED:
+            return self.amount
         total = Decimal("0.00")
         for share in self.overheadbudgetitemshare_set.filter(institute__is_own_chair=True):
             total += (self.amount * share.percentage / Decimal("100")).quantize(Decimal("0.01"))
         return total
 
     def own_chair_percentage(self):
+        if not settings.OVERHEAD_SPLIT_ENABLED:
+            return Decimal("100.00")
         return sum(
             share.percentage
             for share in self.overheadbudgetitemshare_set.filter(institute__is_own_chair=True)

@@ -43,11 +43,13 @@
                 <td>
                     {% for budget in project.overheadbudgetitem_set.all %}
                         <div>
-                            Gesamt: € {{ budget.amount }}<br>
-                            {% for share in budget.overheadbudgetitemshare_set.all %}
-                                {{ share.institute }}: {{ share.percentage }}%{% if share.institute.is_own_chair %} ✓{% endif %}<br>
-                            {% endfor %}
-                            Verfügbar (Lehrstuhl): € {{ budget.available_amount }}
+                            Gesamt: €&nbsp;{{ budget.amount }}<br>
+                            {% if OVERHEAD_SPLIT_ENABLED %}
+                                {% for share in budget.overheadbudgetitemshare_set.all %}
+                                    {{ share.institute }}: {{ share.percentage }}%{% if share.institute.is_own_chair %} ✓{% endif %}<br>
+                                {% endfor %}
+                                Verfügbar (Lehrstuhl): €&nbsp;{{ budget.available_amount }}
+                            {% endif %}
                         </div>
                     {% endfor %}
                 </td>

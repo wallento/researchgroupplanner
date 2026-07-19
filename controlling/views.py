@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 from projects.models import AnnualPool, Landesstelle, OverheadBudgetItemShare, Project, StaffBudgetItem
 from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
 from staffing.utils import get_salaries_by_month
+from django.conf import settings
 from django.utils import timezone
 from django.db.models import Q
 from django.http import JsonResponse
@@ -98,20 +99,21 @@ def warnings(request):
     # 2) Budget checks on total project level.
     projects = Project.objects.all()
     for project in projects:
-        for overhead_item in project.overheadbudgetitem_set.all():
-            distributed_percentage = sum(
-                share.percentage for share in overhead_item.overheadbudgetitemshare_set.all()
-            )
-            if distributed_percentage != Decimal("100.00"):
-                warnings_list.append({
-                    "severity": "warning",
-                    "title": f"Overhead-Verteilung unvollständig: {project.acronym}",
-                    "detail": (
-                        f"Der Overhead-Posten ({overhead_item.amount} EUR) ist aktuell mit "
-                        f"{distributed_percentage}% verteilt. Erwartet sind 100%."
-                    ),
-                    "link": f"/projects/details/{project.acronym}/",
-                })
+        if settings.OVERHEAD_SPLIT_ENABLED:
+            for overhead_item in project.overheadbudgetitem_set.all():
+                distributed_percentage = sum(
+                    share.percentage for share in overhead_item.overheadbudgetitemshare_set.all()
+                )
+                if distributed_percentage != Decimal("100.00"):
+                    warnings_list.append({
+                        "severity": "warning",
+                        "title": f"Overhead-Verteilung unvollständig: {project.acronym}",
+                        "detail": (
+                            f"Der Overhead-Posten ({overhead_item.amount} EUR) ist aktuell mit "
+                            f"{distributed_percentage}% verteilt. Erwartet sind 100%."
+                        ),
+                        "link": f"/projects/details/{project.acronym}/",
+                    })
 
         staff_budget_sum = project.staffbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
         other_budget_sum = project.otherbudgetitem_set.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
@@ -442,69 +444,74 @@ def statistics(request):
     total_third_party_funds = sum((project.budget_total for project in projects), Decimal("0.00")).quantize(Decimal("0.01"))
 
     # Overhead distribution per institute and year.
-    overhead_by_year_and_institute = {}
-    institute_names = set()
-
-    overhead_shares = OverheadBudgetItemShare.objects.select_related(
-        "institute",
-        "overhead_item__project",
-    )
-
-    for share in overhead_shares:
-        project = share.overhead_item.project
-        effective_end = project.end_date
-        if project.extension_planning_date and project.extension_planning_date > project.end_date:
-            effective_end = project.extension_planning_date
-
-        month_count = (
-            (effective_end.year - project.start_date.year) * 12
-            + (effective_end.month - project.start_date.month)
-            + 1
-        )
-        if month_count <= 0:
-            continue
-
-        institute_name = share.institute.short_name
-        institute_names.add(institute_name)
-
-        yearly_share = (share.overhead_item.amount * share.percentage / Decimal("100")) / Decimal(month_count)
-        current = project.start_date.replace(day=1)
-        end_month = effective_end.replace(day=1)
-
-        while current <= end_month:
-            year = str(current.year)
-            overhead_by_year_and_institute.setdefault(year, {})
-            overhead_by_year_and_institute[year][institute_name] = (
-                overhead_by_year_and_institute[year].get(institute_name, Decimal("0.00")) + yearly_share
-            )
-            current += relativedelta(months=1)
-
-    overhead_institutes = sorted(institute_names)
-    overhead_years = sorted(overhead_by_year_and_institute.keys())
+    overhead_institutes = []
     overhead_rows = []
-    overhead_institute_totals = {name: Decimal("0.00") for name in overhead_institutes}
+    overhead_totals_list = []
+    overhead_overall_total = Decimal("0.00")
 
-    for year in overhead_years:
-        values = []
-        row_total = Decimal("0.00")
-        year_data = overhead_by_year_and_institute.get(year, {})
-        for institute_name in overhead_institutes:
-            value = year_data.get(institute_name, Decimal("0.00")).quantize(Decimal("0.01"))
-            values.append(value)
-            row_total += value
-            overhead_institute_totals[institute_name] += value
+    if settings.OVERHEAD_SPLIT_ENABLED:
+        overhead_by_year_and_institute = {}
+        institute_names = set()
 
-        overhead_rows.append({
-            "year": year,
-            "values": values,
-            "total": row_total.quantize(Decimal("0.01")),
-        })
+        overhead_shares = OverheadBudgetItemShare.objects.select_related(
+            "institute",
+            "overhead_item__project",
+        )
 
-    overhead_totals_list = [
-        overhead_institute_totals[name].quantize(Decimal("0.01"))
-        for name in overhead_institutes
-    ]
-    overhead_overall_total = sum(overhead_totals_list, Decimal("0.00")).quantize(Decimal("0.01"))
+        for share in overhead_shares:
+            project = share.overhead_item.project
+            effective_end = project.end_date
+            if project.extension_planning_date and project.extension_planning_date > project.end_date:
+                effective_end = project.extension_planning_date
+
+            month_count = (
+                (effective_end.year - project.start_date.year) * 12
+                + (effective_end.month - project.start_date.month)
+                + 1
+            )
+            if month_count <= 0:
+                continue
+
+            institute_name = share.institute.short_name
+            institute_names.add(institute_name)
+
+            yearly_share = (share.overhead_item.amount * share.percentage / Decimal("100")) / Decimal(month_count)
+            current = project.start_date.replace(day=1)
+            end_month = effective_end.replace(day=1)
+
+            while current <= end_month:
+                year = str(current.year)
+                overhead_by_year_and_institute.setdefault(year, {})
+                overhead_by_year_and_institute[year][institute_name] = (
+                    overhead_by_year_and_institute[year].get(institute_name, Decimal("0.00")) + yearly_share
+                )
+                current += relativedelta(months=1)
+
+        overhead_institutes = sorted(institute_names)
+        overhead_years = sorted(overhead_by_year_and_institute.keys())
+        overhead_institute_totals = {name: Decimal("0.00") for name in overhead_institutes}
+
+        for year in overhead_years:
+            values = []
+            row_total = Decimal("0.00")
+            year_data = overhead_by_year_and_institute.get(year, {})
+            for institute_name in overhead_institutes:
+                value = year_data.get(institute_name, Decimal("0.00")).quantize(Decimal("0.01"))
+                values.append(value)
+                row_total += value
+                overhead_institute_totals[institute_name] += value
+
+            overhead_rows.append({
+                "year": year,
+                "values": values,
+                "total": row_total.quantize(Decimal("0.01")),
+            })
+
+        overhead_totals_list = [
+            overhead_institute_totals[name].quantize(Decimal("0.01"))
+            for name in overhead_institutes
+        ]
+        overhead_overall_total = sum(overhead_totals_list, Decimal("0.00")).quantize(Decimal("0.01"))
 
     return render(request, "controlling/statistics.html", {
         "statistics_years": sorted_years,

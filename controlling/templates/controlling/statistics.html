@@ -18,46 +18,48 @@
     </div>
 </div>
 
-<h2 class="mt-4">Overhead-Verteilung pro Jahr und Institut</h2>
+{% if OVERHEAD_SPLIT_ENABLED %}
+    <h2 class="mt-4">Overhead-Verteilung pro Jahr und Institut</h2>
 
-{% if overhead_rows %}
-    <div class="table-responsive mb-4">
-        <table class="table table-bordered table-striped align-middle">
-            <thead>
-                <tr>
-                    <th>Jahr</th>
-                    {% for institute in overhead_institutes %}
-                        <th>{{ institute }}</th>
-                    {% endfor %}
-                    <th>Gesamt</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in overhead_rows %}
+    {% if overhead_rows %}
+        <div class="table-responsive mb-4">
+            <table class="table table-bordered table-striped align-middle">
+                <thead>
                     <tr>
-                        <th>{{ row.year }}</th>
-                        {% for value in row.values %}
-                            <td>€ {{ value }}</td>
+                        <th>Jahr</th>
+                        {% for institute in overhead_institutes %}
+                            <th>{{ institute }}</th>
                         {% endfor %}
-                        <td><strong>€ {{ row.total }}</strong></td>
+                        <th>Gesamt</th>
                     </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr>
-                    <th>Summe</th>
-                    {% for total in overhead_totals %}
-                        <th>€ {{ total }}</th>
+                </thead>
+                <tbody>
+                    {% for row in overhead_rows %}
+                        <tr>
+                            <th>{{ row.year }}</th>
+                            {% for value in row.values %}
+                                <td>€&nbsp;{{ value }}</td>
+                            {% endfor %}
+                            <td><strong>€&nbsp;{{ row.total }}</strong></td>
+                        </tr>
                     {% endfor %}
-                    <th>€ {{ overhead_overall_total }}</th>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
-{% else %}
-    <div class="alert alert-secondary" role="alert">
-        Es sind aktuell keine Overhead-Verteilungen hinterlegt.
-    </div>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th>Summe</th>
+                        {% for total in overhead_totals %}
+                            <th>€&nbsp;{{ total }}</th>
+                        {% endfor %}
+                        <th>€&nbsp;{{ overhead_overall_total }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    {% else %}
+        <div class="alert alert-secondary" role="alert">
+            Es sind aktuell keine Overhead-Verteilungen hinterlegt.
+        </div>
+    {% endif %}
 {% endif %}
 
 {{ statistics_years|json_script:"stats-years" }}

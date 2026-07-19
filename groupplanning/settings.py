@@ -88,6 +88,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'controlling.context_processors.overhead_split',
             ],
         },
     },
@@ -173,3 +174,10 @@ EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+
+# Controlling Configuration
+
+# Whether overhead budgets are split between the own chair ("Lehrstuhl")
+# and other institutes. Some deployments only ever have a single
+# institute, so the split (and its UI) can be disabled entirely.
+OVERHEAD_SPLIT_ENABLED = env_bool('OVERHEAD_SPLIT_ENABLED', True)
