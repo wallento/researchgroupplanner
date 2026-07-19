@@ -169,6 +169,61 @@ class AnnualPool(models.Model):
         return self.title
 
 
+class SAPFund(models.Model):
+    fund_number = models.CharField("Fondsnummer", max_length=100, unique=True)
+    label = models.CharField("Bezeichnung", max_length=200, blank=True)
+    is_active = models.BooleanField("Aktiv", default=True)
+    is_universal = models.BooleanField("Universalprojekt", default=False)
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="sap_funds",
+        null=True,
+        blank=True,
+    )
+    annual_pool = models.ForeignKey(
+        AnnualPool,
+        on_delete=models.CASCADE,
+        related_name="sap_funds",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["fund_number"]
+        verbose_name = "SAP-Fonds"
+        verbose_name_plural = "SAP-Fonds"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        is_universal=False,
+                        project__isnull=False,
+                        annual_pool__isnull=True,
+                    )
+                    | models.Q(
+                        is_universal=False,
+                        project__isnull=True,
+                        annual_pool__isnull=False,
+                    )
+                    | models.Q(
+                        is_universal=True,
+                        project__isnull=True,
+                        annual_pool__isnull=True,
+                    )
+                ),
+                name="sap_fund_has_valid_owner",
+                violation_error_message=(
+                    "Ein SAP-Fonds muss einem Projekt oder Annual Pool zugeordnet "
+                    "oder als Universalprojekt markiert sein."
+                ),
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.fund_number} – {self.label}" if self.label else self.fund_number
+
+
 class AnnualPoolBudget(models.Model):
     annual_pool = models.ForeignKey(AnnualPool, on_delete=models.CASCADE)
     year = models.PositiveIntegerField()

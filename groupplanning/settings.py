@@ -28,6 +28,14 @@ def env_list(name, default=None):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def env_int(name, default):
+    return int(os.getenv(name, str(default)))
+
+
+def env_float(name, default):
+    return float(os.getenv(name, str(default)))
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -47,6 +55,7 @@ INSTALLED_APPS = [
     'controlling.apps.ControllingConfig',
     'projects.apps.ProjectsConfig',
     'staffing.apps.StaffingConfig',
+    'sap_integration.apps.SAPIntegrationConfig',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -54,6 +63,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_bootstrap5',
+    'django_crontab',
 ]
 
 if DEBUG:
@@ -69,6 +79,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.auth.middleware.LoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -89,6 +100,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'controlling.context_processors.config_settings',
+                'sap_integration.context_processors.sap_feature',
             ],
         },
     },
@@ -168,6 +180,11 @@ if env_bool('DJANGO_SECURE_PROXY_SSL_HEADER', False):
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Authentication
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'main'
+LOGOUT_REDIRECT_URL = 'login'
+
 # Email Configuration
 # https://docs.djangoproject.com/en/5.2/topics/email/
 
@@ -198,3 +215,38 @@ ANNUAL_POOLS_ENABLED = env_bool('ANNUAL_POOLS_ENABLED', True)
 # under static/ and pointing this at it. Set to an empty string to hide
 # the logo entirely.
 BRAND_LOGO = os.getenv('BRAND_LOGO', 'controlling/img/Symbol_White.svg')
+
+# Optional SAP WebGUI integration. Credentials are only read by the sync command.
+SAP_ENABLED = env_bool('SAP_ENABLED', False)
+SAP_URL = os.getenv('SAP_URL', '')
+SAP_USER = os.getenv('SAP_USER', '')
+SAP_PASSWORD = os.getenv('SAP_PASSWORD', '')
+SAP_FINANZSTELLE = os.getenv('SAP_FINANZSTELLE', '')
+SAP_DATA_DIR = Path(os.getenv('SAP_DATA_DIR', BASE_DIR / 'sap_data'))
+SAP_BROWSER = os.getenv('SAP_BROWSER', 'firefox')
+SAP_BROWSER_BINARY = os.getenv('SAP_BROWSER_BINARY', '')
+SAP_HEADLESS = env_bool('SAP_HEADLESS', True)
+SAP_TIMEOUT = env_int('SAP_TIMEOUT', 60)
+SAP_ACTION_DELAY = env_float('SAP_ACTION_DELAY', 1.0)
+SAP_SYNC_CRON = os.getenv('SAP_SYNC_CRON', '0 5 * * *').strip()
+SAP_BACKEND = os.getenv(
+    'SAP_BACKEND',
+    'sap_integration.backends.wuerzburg.WuerzburgWebGUIBackend',
+)
+
+# Cron Jobs Configuration
+# https://github.com/hartwork/django-crontab
+CRONJOBS = [
+    ('0 8 * * *', 'django.core.management.call_command', ['send_notifications'], {}, '>> /tmp/cron_notifications.log 2>&1'),
+]
+
+if SAP_ENABLED:
+    CRONJOBS.append(
+        (
+            SAP_SYNC_CRON,
+            'django.core.management.call_command',
+            ['sync_sap'],
+            {},
+            '>> /tmp/cron_sap.log 2>&1',
+        )
+    )

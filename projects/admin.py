@@ -12,6 +12,7 @@ from .models import (
     OverheadBudgetItemShare,
     Project,
     ProjectMilestone,
+    SAPFund,
     StaffBudgetItem,
     StaffBudgetItemEligibility,
 )
@@ -39,8 +40,21 @@ class ProjectMilestoneInlineAdmin(admin.TabularInline):
     fields = ('date', 'title')
 
 
+class ProjectSAPFundInlineAdmin(admin.TabularInline):
+    model = SAPFund
+    fk_name = "project"
+    extra = 1
+    fields = ("fund_number", "label", "is_active")
+
+
 class ProjectAdmin(admin.ModelAdmin):
-    inlines = [StaffBudgetItemInlineAdmin, OverheadBudgetItemInlineAdmin, OtherBudgetItemInlineAdmin, ProjectMilestoneInlineAdmin]
+    inlines = [
+        StaffBudgetItemInlineAdmin,
+        OverheadBudgetItemInlineAdmin,
+        OtherBudgetItemInlineAdmin,
+        ProjectMilestoneInlineAdmin,
+        ProjectSAPFundInlineAdmin,
+    ]
 
 admin.site.register(Project, ProjectAdmin)
 admin.site.register(Institute)
@@ -75,9 +89,16 @@ class AnnualPoolBudgetInlineAdmin(admin.TabularInline):
     extra = 1
 
 
+class AnnualPoolSAPFundInlineAdmin(admin.TabularInline):
+    model = SAPFund
+    fk_name = "annual_pool"
+    extra = 1
+    fields = ("fund_number", "label", "is_active")
+
+
 @admin.register(AnnualPool)
 class AnnualPoolAdmin(admin.ModelAdmin):
-    inlines = [AnnualPoolBudgetInlineAdmin]
+    inlines = [AnnualPoolBudgetInlineAdmin, AnnualPoolSAPFundInlineAdmin]
     list_display = ("title",)
 
 
@@ -85,3 +106,14 @@ class AnnualPoolAdmin(admin.ModelAdmin):
 class AnnualPoolBudgetAdmin(admin.ModelAdmin):
     list_display = ("annual_pool", "year", "amount_assigned")
     list_filter = ("year", "annual_pool")
+
+
+@admin.register(SAPFund)
+class SAPFundAdmin(admin.ModelAdmin):
+    list_display = ("fund_number", "label", "owner", "is_universal", "is_active")
+    list_filter = ("is_universal", "is_active")
+    search_fields = ("fund_number", "label", "project__acronym", "annual_pool__title")
+
+    @admin.display(description="Zuordnung")
+    def owner(self, obj):
+        return obj.project or obj.annual_pool or "Universalprojekt"

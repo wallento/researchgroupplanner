@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.conf import settings
 from django.urls import include, path
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
@@ -22,6 +23,15 @@ from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from controlling.views import annual_pools as controlling_annual_pools, main as controlling_main, warnings as controlling_warnings, statistics as controlling_statistics, send_test_email
 
 urlpatterns = [
+    path(
+        "login/",
+        auth_views.LoginView.as_view(
+            template_name="registration/login.html",
+            redirect_authenticated_user=True,
+        ),
+        name="login",
+    ),
+    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", controlling_main, name="main"),
     path("warnings/", controlling_warnings, name="warnings"),
     path("statistics/", controlling_statistics, name="statistics"),
@@ -29,6 +39,7 @@ urlpatterns = [
     path("annual-pools/", controlling_annual_pools, name="annual_pools"),
     path("staffing/", include("staffing.urls")),
     path("projects/", include("projects.urls")),
+    path("ist-stand/", include("sap_integration.urls")),
     path("admin/", admin.site.urls),
 ]
 

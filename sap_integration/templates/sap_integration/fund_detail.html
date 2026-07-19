@@ -1,0 +1,102 @@
+{% extends "controlling/base.html" %}
+{% load l10n %}
+
+{% block title %}Kontoauszug {{ fund.fund_number }}{% endblock %}
+{% block heading %}Kontoauszug {{ fund.fund_number }}{% endblock %}
+
+{% block content %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div>
+            <a href="{% url 'sap_integration:overview_year' year %}">← Zur Übersicht</a>
+            <div class="mt-2">
+                <strong>{{ owner }}</strong>
+                <span class="badge text-bg-secondary ms-1">{{ owner_type }}</span>
+                {% if fund.label %}<span class="text-muted ms-2">{{ fund.label }}</span>{% endif %}
+            </div>
+        </div>
+        <div class="btn-group" role="group" aria-label="Geschäftsjahr auswählen">
+            {% for available_year in years %}
+                <a class="btn {% if available_year == year %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{% url 'sap_integration:fund_detail' available_year fund.id %}">{{ available_year }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Budget</div>
+                <div class="fs-5 fw-semibold">
+                    {% if values.has_budget %}{{ values.budget|floatformat:"2g" }} €{% else %}<span class="text-muted">kein SAP-Budget</span>{% endif %}
+                </div>
+            </div></div>
+        </div>
+        <div class="col-sm-6 col-xl">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Bezahlt</div>
+                <div class="fs-5 fw-semibold">{{ values.actual_total|floatformat:"2g" }} €</div>
+            </div></div>
+        </div>
+        <div class="col-sm-6 col-xl">
+            <div class="card h-100 bg-body-secondary"><div class="card-body">
+                <div class="text-muted small">Obligo</div>
+                <div class="fs-5 fw-semibold">{{ values.commitments_total|floatformat:"2g" }} €</div>
+            </div></div>
+        </div>
+        <div class="col-sm-6 col-xl">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Ist + Obligo</div>
+                <div class="fs-5 fw-semibold">{{ values.combined_total|floatformat:"2g" }} €</div>
+            </div></div>
+        </div>
+        <div class="col-sm-6 col-xl">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Rest</div>
+                <div class="fs-5 fw-semibold">
+                    {% if values.remaining is not None %}{{ values.remaining|floatformat:"2g" }} €{% else %}<span class="text-muted">noch nicht berechnet</span>{% endif %}
+                </div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Geschäftspartner</th>
+                    <th>Position</th>
+                    <th class="text-end">Bezahlt</th>
+                    <th class="text-end">Obligo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for transaction in values.transactions %}
+                    <tr{% if transaction.type == "commitment" %} class="table-secondary"{% endif %}>
+                        <td>{{ transaction.business_partner|default:"" }}</td>
+                        <td>{{ transaction.position }}</td>
+                        <td class="text-end">
+                            {% if transaction.type == "actual" %}{{ transaction.amount|floatformat:"2g" }} €{% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if transaction.type == "commitment" %}{{ transaction.amount|floatformat:"2g" }} €{% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="text-center text-muted">Keine Buchungen für diesen Fonds vorhanden.</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="fw-bold">
+                <tr>
+                    <td colspan="2">Summe</td>
+                    <td class="text-end">{{ values.actual_total|floatformat:"2g" }} €</td>
+                    <td class="text-end table-secondary">{{ values.commitments_total|floatformat:"2g" }} €</td>
+                </tr>
+                <tr>
+                    <td colspan="3">Ist + Obligo</td>
+                    <td class="text-end">{{ values.combined_total|floatformat:"2g" }} €</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% if generated_at %}<p class="small text-muted">Datenstand: {{ generated_at|date:"d.m.Y H:i" }} Uhr</p>{% endif %}
+{% endblock %}

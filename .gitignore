@@ -2,6 +2,9 @@ db.sqlite3
 __pycache__
 *.pyc
 .envrc
+.env
+.env.*
+!.env.example
 .direnv
 node_modules/
 npm-debug.log*
@@ -11,3 +14,5 @@ controlling/static/vendor/
 staticfiles/
 branding/*
 !branding/.gitkeep
+sap_data/
+.DS_Store
