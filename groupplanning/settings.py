@@ -88,7 +88,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'controlling.context_processors.overhead_split',
+                'controlling.context_processors.config_settings',
             ],
         },
     },
