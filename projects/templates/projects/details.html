@@ -71,6 +71,17 @@
             </tr>
         {% endfor %}
     </tbody>
+    <tfoot>
+        <tr class="fw-bold">
+            <th scope="row">Summe</th>
+            <td>€&nbsp;{{ budget_totals.amount }}</td>
+            {% for amount in budget_totals.years %}
+                <td>€&nbsp;{{ amount }}</td>
+            {% endfor %}
+            <td>€&nbsp;{{ budget_totals.projected }}</td>
+            <td>€&nbsp;{{ budget_totals.remain }}</td>
+        </tr>
+    </tfoot>
 </table>
 
 <h2 id="timeline">Staffing</h2>

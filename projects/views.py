@@ -62,6 +62,17 @@ def details(request: HttpRequest, acronym: str):
             item.projected_sum += item.years[year]
         item.remain = item.amount - item.projected_sum
 
+    budget_items = [*staff_budget_items, *other_budget_items]
+    budget_totals = {
+        "amount": sum((item.amount for item in budget_items), Decimal("0.00")),
+        "years": [
+            sum((item.years[year] for item in budget_items), Decimal("0.00"))
+            for year in project.get_years()
+        ],
+        "projected": sum((item.projected_sum for item in budget_items), Decimal("0.00")),
+        "remain": sum((item.remain for item in budget_items), Decimal("0.00")),
+    }
+
     total_staff_allocated = sum((item.projected_sum for item in staff_budget_items), Decimal("0.00"))
     total_other_allocated = sum((item.projected_sum for item in other_budget_items), Decimal("0.00"))
     total_overhead_allocated = sum((item.amount for item in project.overheadbudgetitem_set.all()), Decimal("0.00"))
@@ -75,6 +86,7 @@ def details(request: HttpRequest, acronym: str):
         "project": project,
         "staff_budget_items": staff_budget_items,
         "other_budget_items": other_budget_items,
+        "budget_totals": budget_totals,
         "table_assignments": table_assignments,
         "timeline_assignments": timeline_assignments,
         "allocated_sum": total_allocated,

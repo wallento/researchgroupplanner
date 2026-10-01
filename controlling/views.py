@@ -1068,8 +1068,19 @@ def main(request):
                 'title': milestone.title,
             })
 
+    project_totals = {"budget": Decimal("0.00"), "staff": Decimal("0.00"), "other": Decimal("0.00"),
+                      "overhead": Decimal("0.00"), "overhead_available": Decimal("0.00")}
+    for project in projects:
+        project_totals["budget"] += project.budget_total or Decimal("0.00")
+        project_totals["staff"] += sum((b.amount for b in project.staffbudgetitem_set.all()), Decimal("0.00"))
+        project_totals["other"] += sum((b.amount for b in project.otherbudgetitem_set.all()), Decimal("0.00"))
+        for budget in project.overheadbudgetitem_set.all():
+            project_totals["overhead"] += budget.amount
+            project_totals["overhead_available"] += budget.available_amount()
+
     return render(request, "controlling/main.html", {
         "projects": projects,
+        "project_totals": project_totals,
         "staff_list": staff,
         "budgets_per_year": budgets_per_year,
         "landesstellen": landesstellen,

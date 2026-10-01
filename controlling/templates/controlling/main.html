@@ -56,6 +56,19 @@
             </tr>
         {% endfor %}
     </tbody>
+    <tfoot>
+        <tr class="fw-bold">
+            <th scope="row">Summe</th>
+            <td></td>
+            <td>€&nbsp;{{ project_totals.budget }}</td>
+            <td>€&nbsp;{{ project_totals.staff }}</td>
+            <td>€&nbsp;{{ project_totals.other }}</td>
+            <td>
+                Gesamt: €&nbsp;{{ project_totals.overhead }}
+                {% if OVERHEAD_SPLIT_ENABLED %}<br>Verfügbar (Lehrstuhl): €&nbsp;{{ project_totals.overhead_available }}{% endif %}
+            </td>
+        </tr>
+    </tfoot>
 </table>
 
 <link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
