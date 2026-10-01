@@ -73,3 +73,29 @@ def get_timeline_allocations(project: Project) -> list[dict]:
             "end": allocation.end_date or allocation.employment.end_date
         })
     return allocations
+
+
+def get_staff_budget_item_used(budget_item: StaffBudgetItem) -> Decimal:
+    """Planned salary costs of all allocations on a staff budget item."""
+    return sum(
+        (
+            calculate_salary_for_allocation(allocation).salary_sum
+            for allocation in StaffFundingAllocation.objects.filter(budget_item=budget_item)
+        ),
+        Decimal("0.00"),
+    )
+
+
+def get_other_budget_item_used(budget_item) -> Decimal:
+    """Planned transactions of an other budget item within the project years."""
+    years = [int(year) for year in budget_item.project.get_years()]
+    return sum(
+        (transaction.amount for transaction in budget_item.get_transactions() if transaction.date.year in years),
+        Decimal("0.00"),
+    )
+
+
+def budget_usage_percent(used: Decimal, budget: Decimal | None) -> Decimal | None:
+    if not budget:
+        return None
+    return (used * 100 / budget).quantize(Decimal("0.1"))

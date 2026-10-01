@@ -29,15 +29,21 @@
                         <br><span class="text-muted">kostenneutrale Verlängerung bis {{ project.extension_planning_date }}</span>
                     {% endif %}
                 </td>
-                <td>€&nbsp;{{ project.budget_total }}</td>
+                <td>{% include "controlling/_budget_usage.html" with used=project.used_budget budget=project.usage_budget percent=project.usage_percent %}</td>
                 <td>
                     {% for budget in project.staffbudgetitem_set.all %}
-                        <div>{{ budget.short_title }}: €&nbsp;{{ budget.amount }}</div>
+                        <div class="mb-2">
+                            <div>{{ budget.short_title }}:</div>
+                            {% include "controlling/_budget_usage.html" with used=budget.used budget=budget.amount percent=budget.usage_percent %}
+                        </div>
                     {% endfor %}
                 </td>
                 <td>
                     {% for budget in project.otherbudgetitem_set.all %}
-                        <div>{{ budget.short_title }}: €&nbsp;{{ budget.amount }}</div>
+                        <div class="mb-2">
+                            <div>{{ budget.short_title }}:</div>
+                            {% include "controlling/_budget_usage.html" with used=budget.used budget=budget.amount percent=budget.usage_percent %}
+                        </div>
                     {% endfor %}
                 </td>
                 <td>
@@ -60,9 +66,9 @@
         <tr class="fw-bold">
             <th scope="row">Summe</th>
             <td></td>
-            <td>€&nbsp;{{ project_totals.budget }}</td>
-            <td>€&nbsp;{{ project_totals.staff }}</td>
-            <td>€&nbsp;{{ project_totals.other }}</td>
+            <td>{% include "controlling/_budget_usage.html" with used=project_totals.used budget=project_totals.budget percent=project_totals.usage_percent %}</td>
+            <td>{% include "controlling/_budget_usage.html" with used=project_totals.staff_used budget=project_totals.staff percent=project_totals.staff_percent %}</td>
+            <td>{% include "controlling/_budget_usage.html" with used=project_totals.other_used budget=project_totals.other percent=project_totals.other_percent %}</td>
             <td>
                 Gesamt: €&nbsp;{{ project_totals.overhead }}
                 {% if OVERHEAD_SPLIT_ENABLED %}<br>Verfügbar (Lehrstuhl): €&nbsp;{{ project_totals.overhead_available }}{% endif %}
