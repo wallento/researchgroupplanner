@@ -140,21 +140,37 @@
         <h2 class="h4 mt-5">Planung ohne SAP-Beleg</h2>
         <p class="text-muted small">
             Diese Planungseinträge liegen im Zeitraum des Exports, haben aber keine passende SAP-Position.
-            Verknüpfen lassen sie sich über die Detailansicht der jeweiligen SAP-Position.
+            Verknüpfen lassen sie sich über die Detailansicht der jeweiligen SAP-Position, nicht benötigte Einträge können hier gelöscht werden.
         </p>
         <ul class="list-group mb-4">
             {% for allocation in result.orphan_allocations %}
-                <li class="list-group-item list-group-item-warning">
-                    Personal: <a href="{% url 'staffing:details' allocation.employment.staff_member.id %}">{{ allocation.employment.staff_member }}</a>
-                    {{ allocation.percentage|floatformat:"-2" }} % ({{ allocation.start_date|date:"d.m.Y" }} – {{ allocation.end_date|default:allocation.employment.end_date|date:"d.m.Y" }})
-                    auf {{ allocation.budget_item.title }}
-                    {% if allocation.sap_reference %}<span class="text-muted">– SAP-Referenz {{ allocation.sap_reference }} nicht im Export</span>{% endif %}
+                <li class="list-group-item list-group-item-warning d-flex justify-content-between align-items-center gap-2">
+                    <span>
+                        Personal: <a href="{% url 'staffing:details' allocation.employment.staff_member.id %}">{{ allocation.employment.staff_member }}</a>
+                        {{ allocation.percentage|floatformat:"-2" }} % ({{ allocation.start_date|date:"d.m.Y" }} – {{ allocation.end_date|default:allocation.employment.end_date|date:"d.m.Y" }})
+                        auf {{ allocation.budget_item.title }}
+                        {% if allocation.sap_reference %}<span class="text-muted">– SAP-Referenz {{ allocation.sap_reference }} nicht im Export</span>{% endif %}
+                    </span>
+                    <form method="post" action="{% url 'sap_integration:delete_orphan' fund.id %}" onsubmit="return confirm('Zuordnung wirklich löschen?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="kind" value="allocation">
+                        <input type="hidden" name="id" value="{{ allocation.id }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Löschen</button>
+                    </form>
                 </li>
             {% endfor %}
             {% for transaction in result.orphan_transactions %}
-                <li class="list-group-item list-group-item-warning">
-                    {{ transaction.budget_item.title }}: {{ transaction.date|date:"d.m.Y" }} {{ transaction.amount|floatformat:"2g" }} € {{ transaction.description|default:"" }}
-                    {% if transaction.sap_id %}<span class="text-muted">– SAP-Referenz {{ transaction.sap_id }} nicht im Export</span>{% endif %}
+                <li class="list-group-item list-group-item-warning d-flex justify-content-between align-items-center gap-2">
+                    <span>
+                        {{ transaction.budget_item.title }}: {{ transaction.date|date:"d.m.Y" }} {{ transaction.amount|floatformat:"2g" }} € {{ transaction.description|default:"" }}
+                        {% if transaction.sap_id %}<span class="text-muted">– SAP-Referenz {{ transaction.sap_id }} nicht im Export</span>{% endif %}
+                    </span>
+                    <form method="post" action="{% url 'sap_integration:delete_orphan' fund.id %}" onsubmit="return confirm('Planungseintrag wirklich löschen?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="kind" value="transaction">
+                        <input type="hidden" name="id" value="{{ transaction.id }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Löschen</button>
+                    </form>
                 </li>
             {% endfor %}
         </ul>

@@ -394,6 +394,28 @@ def cost_type_mapping(request, fund_id):
 
 
 @staff_member_required
+@require_POST
+def delete_orphan(request, fund_id):
+    """Delete a planning entry listed under "Planung ohne SAP-Beleg"."""
+    _ensure_gm_import_enabled()
+    fund, result = _load_reconciliation(fund_id)
+    kind = request.POST.get("kind")
+    entry_id = request.POST.get("id")
+    orphans = {
+        "allocation": result.orphan_allocations,
+        "transaction": result.orphan_transactions,
+    }.get(kind, [])
+    entry = next((orphan for orphan in orphans if str(orphan.id) == entry_id), None)
+    if entry is None:
+        messages.error(request, "Dieser Planungseintrag ist nicht (mehr) ohne SAP-Beleg.")
+    else:
+        label = str(entry)
+        entry.delete()
+        messages.success(request, f"Planungseintrag gelöscht: {label}")
+    return redirect("sap_integration:reconciliation", fund.id)
+
+
+@staff_member_required
 def position_detail(request, fund_id, position_id):
     _ensure_gm_import_enabled()
     fund, result = _load_reconciliation(fund_id)
