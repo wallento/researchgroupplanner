@@ -140,6 +140,10 @@
             <h1 class="display-5 fw-bold text-body-emphasis">{% block heading %}Group Planning{% endblock %}</h1>
         </div>
 
+        {% for message in messages %}
+            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} mt-3">{{ message }}</div>
+        {% endfor %}
+
         {% block content %}{% endblock %}
 
     </div>

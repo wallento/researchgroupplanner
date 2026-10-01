@@ -1,0 +1,162 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}SAP-Abgleich {{ project.acronym }}{% endblock %}
+{% block heading %}SAP-Abgleich {{ project.acronym }}{% endblock %}
+
+{% block content %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 my-3">
+        <div>
+            <a href="{% url 'sap_integration:overview' %}">← Zur Übersicht</a>
+            <span class="mx-2">·</span>
+            <a href="{% url 'projects:details' project.acronym %}">Projektplanung</a>
+        </div>
+        <small class="text-muted">
+            PSP-Element {{ fund.fund_number }} · {{ result.sap_import.file_name }} ·
+            Buchungen bis {{ result.sap_import.last_booking|date:"d.m.Y" }} ·
+            importiert {{ result.sap_import.imported_at|date:"d.m.Y H:i" }}
+        </small>
+    </div>
+
+    <h2 class="h4 mt-4">Budget nach E/A-Art</h2>
+    <div class="table-responsive">
+        <table class="table table-bordered table-sm align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>E/A-Art</th>
+                    <th class="text-end">SAP-Budget</th>
+                    <th class="text-end">Ist</th>
+                    <th class="text-end">Obligo</th>
+                    <th class="text-end">Rest</th>
+                    <th>Planungsbudget</th>
+                    <th class="text-end">Planbetrag</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in result.cost_types %}
+                    <tr>
+                        <td>{{ row.cost_type }}</td>
+                        <td class="text-end">{{ row.budget|floatformat:"2g" }} €</td>
+                        <td class="text-end">{{ row.actual|floatformat:"2g" }} €</td>
+                        <td class="text-end table-secondary">{{ row.commitment|floatformat:"2g" }} €</td>
+                        <td class="text-end fw-semibold{% if row.remaining < 0 %} text-danger{% endif %}">{{ row.remaining|floatformat:"2g" }} €</td>
+                        <td>
+                            <form method="post" action="{% url 'sap_integration:cost_type_mapping' fund.id %}" class="d-flex gap-1">
+                                {% csrf_token %}
+                                {{ row.form.cost_type }}
+                                <select name="target" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Planungsbudget für {{ row.cost_type }}">
+                                    {% for value, label in row.form.fields.target.choices %}
+                                        <option value="{{ value }}"{% if value == row.form.initial.target %} selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <noscript><button class="btn btn-sm btn-outline-primary">Speichern</button></noscript>
+                            </form>
+                        </td>
+                        <td class="text-end">{% if row.budget_item %}{{ row.budget_item.amount|floatformat:"2g" }} €{% endif %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted">
+        Die Zuordnung bestimmt, auf welches Sachmittelbudget SAP-Positionen übernommen werden.
+        Personalpositionen werden über die zulässigen Beschäftigungskategorien des Personalbudgets zugeordnet.
+    </p>
+
+    <h2 class="h4 mt-4">Positionen</h2>
+    <ul class="nav nav-pills mb-3">
+        {% for filter in filters %}
+            <li class="nav-item">
+                <a class="nav-link{% if filter.key == selected_filter %} active{% endif %}" href="?filter={{ filter.key }}">
+                    {{ filter.label }} <span class="badge text-bg-light">{{ filter.count }}</span>
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+
+    {% for section in sections %}
+        <h3 class="h5 mt-4">{{ section.label }}</h3>
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover table-sm align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Status</th>
+                        <th>Beleg</th>
+                        <th>Bezeichnung</th>
+                        <th>Zeitraum</th>
+                        <th class="text-end">Ist</th>
+                        <th class="text-end">Obligo</th>
+                        <th class="text-end">Planung</th>
+                        <th>Hinweise</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for check in section.checks %}
+                        {% with position=check.position %}
+                        <tr>
+                            <td>{% include "sap_integration/_status_badge.html" %}</td>
+                            <td><a href="{% url 'sap_integration:position_detail' fund.id position.id %}">{{ position.reference }}</a></td>
+                            <td>
+                                {% if position.person_name %}
+                                    <strong>{{ position.person_name }}</strong>
+                                    {% if position.contract_type %}<span class="badge text-bg-secondary">{{ position.contract_type }}</span>{% endif %}
+                                    {% if check.staff_member %}<div class="small text-muted">Planung: {{ check.staff_member }}</div>{% endif %}
+                                {% else %}
+                                    {{ position.title|default:position.description }}
+                                {% endif %}
+                                <div class="small text-muted">E/A-Art {{ position.cost_type }}</div>
+                            </td>
+                            <td class="small text-nowrap">
+                                {% for period in position.contract_periods %}
+                                    <div>{{ period.0 }} – {{ period.1 }}</div>
+                                {% empty %}
+                                    {{ position.first_date|date:"d.m.Y" }}
+                                {% endfor %}
+                            </td>
+                            <td class="text-end text-nowrap">{{ position.actual|floatformat:"2g" }} €</td>
+                            <td class="text-end text-nowrap table-secondary">{{ position.commitment|floatformat:"2g" }} €</td>
+                            <td class="text-end text-nowrap">
+                                {% if check.allocations or check.transactions %}{{ check.planned_total|floatformat:"2g" }} €{% else %}–{% endif %}
+                            </td>
+                            <td class="small">
+                                {% for finding in check.findings %}<div>{{ finding }}</div>{% endfor %}
+                                {% for note in check.notes %}<div class="text-muted">{{ note }}</div>{% endfor %}
+                                {% if check.ignored %}<div class="text-muted">Ignoriert{% if check.ignored.note %}: {{ check.ignored.note }}{% endif %}</div>{% endif %}
+                            </td>
+                            <td class="text-nowrap">
+                                {% include "sap_integration/_quick_actions.html" %}
+                            </td>
+                        </tr>
+                        {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% empty %}
+        <div class="alert alert-success">Keine Positionen in dieser Ansicht.</div>
+    {% endfor %}
+
+    {% if result.orphan_allocations or result.orphan_transactions %}
+        <h2 class="h4 mt-5">Planung ohne SAP-Beleg</h2>
+        <p class="text-muted small">
+            Diese Planungseinträge liegen im Zeitraum des Exports, haben aber keine passende SAP-Position.
+            Verknüpfen lassen sie sich über die Detailansicht der jeweiligen SAP-Position.
+        </p>
+        <ul class="list-group mb-4">
+            {% for allocation in result.orphan_allocations %}
+                <li class="list-group-item list-group-item-warning">
+                    Personal: <a href="{% url 'staffing:details' allocation.employment.staff_member.id %}">{{ allocation.employment.staff_member }}</a>
+                    {{ allocation.percentage|floatformat:"-2" }} % ({{ allocation.start_date|date:"d.m.Y" }} – {{ allocation.end_date|default:allocation.employment.end_date|date:"d.m.Y" }})
+                    auf {{ allocation.budget_item.title }}
+                    {% if allocation.sap_reference %}<span class="text-muted">– SAP-Referenz {{ allocation.sap_reference }} nicht im Export</span>{% endif %}
+                </li>
+            {% endfor %}
+            {% for transaction in result.orphan_transactions %}
+                <li class="list-group-item list-group-item-warning">
+                    {{ transaction.budget_item.title }}: {{ transaction.date|date:"d.m.Y" }} {{ transaction.amount|floatformat:"2g" }} € {{ transaction.description|default:"" }}
+                    {% if transaction.sap_id %}<span class="text-muted">– SAP-Referenz {{ transaction.sap_id }} nicht im Export</span>{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endblock %}

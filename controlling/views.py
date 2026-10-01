@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from .utils import render
 from dateutil.relativedelta import relativedelta
 
-from projects.models import AnnualPool, Landesstelle, OverheadBudgetItemShare, Project, StaffBudgetItem
+from projects.models import AnnualPool, Landesstelle, OverheadBudgetItemShare, Project, SAPFund, StaffBudgetItem
 from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
 from staffing.utils import get_salaries_by_month
 from django.conf import settings
@@ -15,6 +15,7 @@ from django.core.mail import send_mail
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.db.models import Sum
 
@@ -405,12 +406,37 @@ def warnings(request):
                 "link": f"/staffing/details/{staff_member.id}/",
             })
 
+    if settings.SAP_GM_IMPORT_ENABLED:
+        warnings_list.extend(_sap_reconciliation_warnings())
+
     severity_order = {"danger": 0, "warning": 1, "info": 2, "success": 3}
     warnings_list.sort(key=lambda item: (severity_order.get(item["severity"], 99), item["title"]))
 
     return render(request, "controlling/warnings.html", {
         "warnings_list": warnings_list,
     })
+
+
+def _sap_reconciliation_warnings():
+    from sap_integration.crosscheck import Status, build_reconciliation
+
+    result_warnings = []
+    for fund in SAPFund.objects.filter(project__isnull=False, sap_imports__isnull=False).select_related("project").distinct():
+        result = build_reconciliation(fund)
+        if result is None or not result.open_checks:
+            continue
+        missing = sum(1 for check in result.open_checks if check.status == Status.MISSING)
+        mismatch = len(result.open_checks) - missing
+        result_warnings.append({
+            "severity": "warning",
+            "title": f"SAP-Abgleich: {fund.project.acronym}",
+            "detail": (
+                f"{missing} SAP-Position(en) fehlen in der Planung, {mismatch} weichen ab "
+                f"(Export bis {result.sap_import.last_booking:%d.%m.%Y})."
+            ),
+            "link": reverse("sap_integration:reconciliation", args=[fund.id]),
+        })
+    return result_warnings
 
 
 @login_required

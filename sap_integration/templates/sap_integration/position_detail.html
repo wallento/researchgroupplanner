@@ -1,0 +1,205 @@
+{% extends "controlling/base.html" %}
+{% load django_bootstrap5 %}
+
+{% block title %}SAP-Position {{ position.reference }}{% endblock %}
+{% block heading %}SAP-Position {{ position.reference }}{% endblock %}
+
+{% block content %}
+    <div class="my-3"><a href="{{ back_url }}">← Zum Abgleich {{ project.acronym }}</a></div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between flex-wrap gap-2">
+                <div>
+                    <h2 class="h5 mb-1">{{ position.person_name|default:position.title }}</h2>
+                    {% if position.person_name %}<div class="text-muted">{{ position.title }}</div>{% endif %}
+                    <div>{{ position.description }}</div>
+                    <div class="small text-muted mt-1">
+                        {{ position.get_kind_display }} · E/A-Art {{ position.cost_type }}
+                        {% if position.contract_type %} · {{ position.contract_type }}{% endif %}
+                        {% if position.percentage %} · {{ position.percentage|floatformat:"-2" }} %{% endif %}
+                        {% if position.weekly_hours %} · {{ position.weekly_hours|floatformat:"-2" }} SWS{% endif %}
+                    </div>
+                    {% for period in position.contract_periods %}
+                        <div class="small">Vertrag laut SAP: {{ period.0 }} – {{ period.1 }}</div>
+                    {% endfor %}
+                </div>
+                <div class="text-end">
+                    {% include "sap_integration/_status_badge.html" %}
+                    <div class="mt-2">Ist <strong>{{ position.actual|floatformat:"2g" }} €</strong></div>
+                    <div>Obligo <strong>{{ position.commitment|floatformat:"2g" }} €</strong></div>
+                    {% if check.allocations or check.transactions %}
+                        <div>Planung <strong>{{ check.planned_total|floatformat:"2g" }} €</strong></div>
+                    {% endif %}
+                </div>
+            </div>
+            {% if check.findings or check.notes %}
+                <ul class="mt-3 mb-0">
+                    {% for finding in check.findings %}<li>{{ finding }}</li>{% endfor %}
+                    {% for note in check.notes %}<li class="text-muted">{{ note }}</li>{% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if check.status == 'ignored' %}
+        <div class="alert alert-secondary d-flex justify-content-between align-items-center">
+            <span>Diese Position wird ignoriert{% if check.ignored.note %}: {{ check.ignored.note }}{% endif %}.</span>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unignore">
+                <button class="btn btn-sm btn-outline-secondary">Wieder aufnehmen</button>
+            </form>
+        </div>
+    {% endif %}
+
+    {% if position.kind == 'staff' %}
+        {% if check.allocations %}
+            <h3 class="h5">Planung</h3>
+            <ul class="list-group mb-3">
+                {% for allocation in check.allocations %}
+                    <li class="list-group-item">
+                        <a href="{% url 'staffing:details' allocation.employment.staff_member.id %}">{{ allocation.employment.staff_member }}</a>
+                        {{ allocation.percentage|floatformat:"-2" }} % ({{ allocation.start_date|date:"d.m.Y" }} – {{ allocation.end_date|default:allocation.employment.end_date|date:"d.m.Y" }})
+                        auf {{ allocation.budget_item.title }}
+                        {% if allocation.sap_reference %}<span class="badge text-bg-light">SAP {{ allocation.sap_reference }}</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            {% if check.linked_by_name %}
+                <form method="post" class="mb-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="confirm_link">
+                    <button class="btn btn-outline-primary btn-sm">Zuordnung bestätigen</button>
+                </form>
+            {% endif %}
+        {% endif %}
+
+        {% if salary_rows %}
+            <h3 class="h5 mt-4" id="gehaelter">Gehälter je Monat</h3>
+            <div class="table-responsive" style="max-height: 28rem;">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light sticky-top">
+                        <tr><th>Monat</th><th class="text-end">SAP (Ist)</th><th class="text-end">Planung</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for row in salary_rows %}
+                            <tr{% if row.mismatch %} class="table-warning"{% endif %}>
+                                <td>{{ row.month }}</td>
+                                <td class="text-end">{% if row.sap is not None %}{{ row.sap|floatformat:"2g" }} €{% endif %}</td>
+                                <td class="text-end">{% if row.planned is not None %}{{ row.planned|floatformat:"2g" }} €{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if check.allocations %}
+                <form method="post" class="d-flex flex-wrap align-items-center gap-3 mb-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="apply_salaries">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="include_forecast" id="include_forecast">
+                        <label class="form-check-label" for="include_forecast">Restmonate des SAP-Vertrags mit dem letzten SAP-Monatsgehalt fortschreiben</label>
+                    </div>
+                    <button class="btn btn-primary btn-sm">Gehälter aus SAP übernehmen</button>
+                    <div class="form-text w-100">
+                        Überschreibt die Gehaltssätze der Anstellung in den Monaten mit SAP-Buchungen, sodass die geplanten Kosten auf diesem Projekt den SAP-Istwerten entsprechen.
+                        Monate außerhalb der geplanten Zuordnung werden nicht verändert.
+                    </div>
+                </form>
+            {% endif %}
+        {% endif %}
+
+        {% if check.status != 'ignored' %}
+            <h3 class="h5 mt-4" id="uebernehmen">{% if check.allocations %}Weitere Zuordnung anlegen{% else %}In Planung übernehmen{% endif %}</h3>
+            <form method="post" class="card card-body mb-4">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="transform_staff">
+                {% bootstrap_form staff_form %}
+                <div class="form-text mb-3">
+                    Je SAP-Vertragszeitraum wird eine Zuordnung mit der SAP-Referenz {{ position.reference }} angelegt.
+                    Bei bestehender Anstellung werden keine neuen Anstellungen erzeugt; Gehälter nur übernehmen, wenn die Anstellung vollständig aus diesem Projekt finanziert wird.
+                </div>
+                <div><button class="btn btn-primary">Übernehmen</button></div>
+            </form>
+
+            <h3 class="h5">Mit bestehender Zuordnung verknüpfen</h3>
+            <form method="post" class="card card-body mb-4">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="link_allocations">
+                {% bootstrap_form link_allocations_form %}
+                <div><button class="btn btn-outline-primary">Verknüpfen</button></div>
+            </form>
+        {% endif %}
+    {% elif position.kind != 'income' %}
+        {% if check.transactions %}
+            <h3 class="h5">Planung</h3>
+            <ul class="list-group mb-3">
+                {% for transaction in check.transactions %}
+                    <li class="list-group-item">
+                        {{ transaction.budget_item.title }}: {{ transaction.date|date:"d.m.Y" }} · {{ transaction.amount|floatformat:"2g" }} € · {{ transaction.description|default:"" }}
+                    </li>
+                {% endfor %}
+            </ul>
+            {% if check.status == 'mismatch' and check.transactions|length == 1 %}
+                <form method="post" class="mb-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_amount">
+                    <button class="btn btn-primary btn-sm">Betrag {{ position.total|floatformat:"2g" }} € übernehmen</button>
+                </form>
+            {% endif %}
+        {% elif check.status != 'ignored' %}
+            <h3 class="h5" id="uebernehmen">In Planung übernehmen</h3>
+            <form method="post" class="card card-body mb-4">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_transaction">
+                {% bootstrap_form create_transaction_form %}
+                <div class="form-text mb-3">Legt einen Planungseintrag über {{ position.total|floatformat:"2g" }} € (Ist + Obligo) mit SAP-Referenz {{ position.reference }} an.</div>
+                <div><button class="btn btn-primary">Übernehmen</button></div>
+            </form>
+
+            <h3 class="h5">Mit bestehendem Planungseintrag verknüpfen</h3>
+            <form method="post" class="card card-body mb-4">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="link_transaction">
+                {% bootstrap_form link_transaction_form %}
+                <div><button class="btn btn-outline-primary">Verknüpfen</button></div>
+            </form>
+        {% endif %}
+    {% endif %}
+
+    {% if check.status != 'ignored' and check.status != 'info' %}
+        <h3 class="h5">Ignorieren</h3>
+        <form method="post" class="row g-2 align-items-end mb-4">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="ignore">
+            <div class="col-md-8">
+                <label class="form-label" for="id_note">Notiz (optional)</label>
+                <input class="form-control" type="text" name="note" id="id_note" maxlength="255" placeholder="z.B. Testreservierung, anderes Projekt, …">
+            </div>
+            <div class="col-md-4"><button class="btn btn-outline-secondary w-100">Ignorieren</button></div>
+        </form>
+    {% endif %}
+
+    <h3 class="h5 mt-4">Buchungen</h3>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle">
+            <thead class="table-light">
+                <tr><th>Datum</th><th>Beleg</th><th>Werttyp</th><th>E/A-Art</th><th>Text</th><th class="text-end">Betrag</th></tr>
+            </thead>
+            <tbody>
+                {% for booking in position.bookings %}
+                    <tr{% if booking.commitment %} class="table-secondary"{% endif %}>
+                        <td class="text-nowrap">{{ booking.date|default:"" }}</td>
+                        <td>{{ booking.document }}</td>
+                        <td>{{ booking.value_type }}</td>
+                        <td>{{ booking.cost_type }}</td>
+                        <td>{{ booking.text }}{% if booking.partner %} <span class="text-muted">({{ booking.partner }})</span>{% endif %}</td>
+                        <td class="text-end text-nowrap">{{ booking.amount }} €</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted">Grau hinterlegte Zeilen sind Obligo (Mittelreservierungen, Bestellungen).</p>
+{% endblock %}

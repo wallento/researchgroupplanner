@@ -101,6 +101,8 @@ SAP_DATA_DIR=/data/sap
 SAP_BROWSER=firefox
 SAP_HEADLESS=1
 SAP_SYNC_CRON=0 5 * * *
+# SAP Grants Management project export upload (optional)
+SAP_GM_IMPORT_ENABLED=0
 ```
 
 Protect the `.env` file locally as well:
@@ -190,6 +192,42 @@ Setting `SAP_ENABLED=1` also installs a daily synchronization job. It runs at
 year in the configured Django time zone. The container writes the cron output to
 `/tmp/cron_sap.log`. Restart the container after changing the feature flag or
 schedule so that `django-crontab` can update the entry.
+
+### Project exports from SAP Grants Management (GM_E_4GBA)
+
+Institutions using SAP Grants Management can upload the line-item export
+(report GM_E_4GBA, "Budget und Obligo/Ist") per project instead of using the
+WebGUI download. Enable it with `SAP_GM_IMPORT_ENABLED=1`; no SAP credentials
+are used. It is independent of `SAP_ENABLED`, which controls the WebGUI
+download, the fiscal-year pages and the daily sync job.
+
+1. Enter the project's PSP-Element (e.g. `1/070004900`) as fund number of a
+   SAP fund on the project in the Django admin.
+2. Upload the `.xlsx` export on `/ist-stand/`, or import it on the command line:
+
+   ```shell
+   python manage.py import_sap_export EXPORT.xlsx
+   ```
+
+   The project is detected from the PSP-Element. A new import replaces the
+   previous one for that project. Dates of birth in payroll texts are dropped.
+
+The import groups all bookings into positions: each staff contract
+(Mittelreservierung, with person, contract periods and payroll per month),
+each trip, each purchase (requisition → order → invoice) and each funder
+payment. The reconciliation page (`/ist-stand/abgleich/<fund>/`) cross-checks
+them with the planning:
+
+- Staff positions are matched to funding allocations through the allocation's
+  SAP reference or the person's name. Differences in contract period, extent,
+  monthly salary and open commitments are reported.
+- Travel and other positions are matched to budget transactions through
+  `sap_id`. Each E/A-Art is mapped onto a planning budget item on the page.
+- Positions can be transferred into the planning (employment, allocation and
+  salaries, or a budget transaction), linked to existing entries, or ignored.
+  Ignored positions and name mappings persist across imports.
+
+Open differences are also listed on the warnings page.
 
 ## Email Notifications
 

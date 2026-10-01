@@ -1,0 +1,52 @@
+{% url 'sap_integration:position_detail' fund.id check.position.id as action_url %}
+<div class="d-flex flex-wrap gap-1">
+    {% if check.status == 'ignored' %}
+        <form method="post" action="{{ action_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="unignore">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button class="btn btn-sm btn-outline-secondary">Wieder aufnehmen</button>
+        </form>
+    {% elif check.status != 'info' %}
+        {% if check.position.kind == 'staff' %}
+            {% if check.status == 'missing' %}
+                <a class="btn btn-sm btn-primary" href="{{ action_url }}#uebernehmen">Übernehmen …</a>
+            {% elif check.linked_by_name %}
+                <form method="post" action="{{ action_url }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="confirm_link">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn btn-sm btn-outline-primary">Zuordnung bestätigen</button>
+                </form>
+            {% endif %}
+            {% if check.salary_mismatch_months %}
+                <a class="btn btn-sm btn-outline-primary" href="{{ action_url }}#gehaelter">Gehälter …</a>
+            {% endif %}
+        {% else %}
+            {% if check.status == 'missing' and check.budget_item %}
+                <form method="post" action="{{ action_url }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create_transaction">
+                    <input type="hidden" name="budget_item" value="{{ check.budget_item.id }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn btn-sm btn-primary" title="Als Planungseintrag auf {{ check.budget_item.title }} übernehmen">Übernehmen</button>
+                </form>
+            {% elif check.status == 'missing' %}
+                <a class="btn btn-sm btn-primary" href="{{ action_url }}#uebernehmen">Übernehmen …</a>
+            {% elif check.status == 'mismatch' and check.transactions|length == 1 %}
+                <form method="post" action="{{ action_url }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_amount">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn btn-sm btn-outline-primary">Betrag übernehmen</button>
+                </form>
+            {% endif %}
+        {% endif %}
+        <form method="post" action="{{ action_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="ignore">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button class="btn btn-sm btn-outline-secondary">Ignorieren</button>
+        </form>
+    {% endif %}
+</div>

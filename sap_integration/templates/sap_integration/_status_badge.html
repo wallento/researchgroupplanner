@@ -1,0 +1,1 @@
+<span class="badge text-bg-{% if check.status == 'missing' %}danger{% elif check.status == 'mismatch' %}warning{% elif check.status == 'ok' %}success{% else %}secondary{% endif %}">{{ check.status_label }}</span>

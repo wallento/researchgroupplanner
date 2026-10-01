@@ -5,6 +5,63 @@
 {% block heading %}Ist-Stand{% endblock %}
 
 {% block content %}
+    {% if sap_gm_import_enabled %}
+    <h2 class="h4 mt-4">Projektexporte (Grants Management)</h2>
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Projekt</th>
+                    <th>PSP-Element</th>
+                    <th>Datei</th>
+                    <th>Buchungen bis</th>
+                    <th>Importiert</th>
+                    <th class="text-end">Offene Abweichungen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for export in project_exports %}
+                    <tr>
+                        <td>
+                            <a class="fw-semibold text-decoration-none" href="{% url 'sap_integration:reconciliation' export.import.fund_id %}">
+                                {{ export.import.fund.project|default:export.import.fund }}
+                            </a>
+                        </td>
+                        <td>{{ export.import.fund.fund_number }}</td>
+                        <td>{{ export.import.file_name }}</td>
+                        <td>{{ export.import.last_booking|date:"d.m.Y" }}</td>
+                        <td>{{ export.import.imported_at|date:"d.m.Y H:i" }}</td>
+                        <td class="text-end">
+                            {% if export.open_count is None %}
+                                <span class="text-muted">kein Projekt</span>
+                            {% elif export.open_count %}
+                                <span class="badge text-bg-warning">{{ export.open_count }}</span>
+                            {% else %}
+                                <span class="badge text-bg-success">0</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted">Noch kein Projektexport importiert.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <form method="post" action="{% url 'sap_integration:upload_export' %}" enctype="multipart/form-data" class="row g-2 align-items-end mb-5">
+        {% csrf_token %}
+        <div class="col-md-8">
+            <label class="form-label" for="{{ upload_form.export_file.id_for_label }}">{{ upload_form.export_file.label }}</label>
+            <input class="form-control" type="file" name="export_file" id="{{ upload_form.export_file.id_for_label }}" accept=".xlsx" required>
+            <div class="form-text">Das Projekt wird über das PSP-Element erkannt. Es muss als SAP-Fonds beim Projekt eingetragen sein. Ein erneuter Import ersetzt den vorherigen Stand.</div>
+        </div>
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-primary w-100">Importieren</button>
+        </div>
+    </form>
+    {% endif %}
+
+    {% if sap_webgui_enabled %}
+    {% if sap_gm_import_enabled %}<h2 class="h4">Geschäftsjahre</h2>{% endif %}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
         <div class="btn-group" role="group" aria-label="Geschäftsjahr auswählen">
             {% for year in years %}
@@ -72,5 +129,6 @@
         <div class="alert alert-secondary">
             Führe zuerst <code>python manage.py parse_sap --year {% now "Y" %}</code> aus.
         </div>
+    {% endif %}
     {% endif %}
 {% endblock %}

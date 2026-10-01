@@ -57,6 +57,13 @@ class StaffFundingAllocation(models.Model):
     )
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    sap_reference = models.CharField(
+        "SAP-Referenz",
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="Referenzbelegnummer der SAP-Mittelreservierung, z.B. 4000123",
+    )
 
     def clean(self):
         super().clean()
