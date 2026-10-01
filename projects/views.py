@@ -3,12 +3,21 @@ from controlling.utils import render
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Landesstelle, StaffBudgetItem, Project
+from .models import Landesstelle, OtherBudgetItemTransaction, StaffBudgetItem, Project
 from staffing.models import StaffFundingAllocation
 from django.http import HttpRequest
-from django.shortcuts import get_object_or_404
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+from django.views.decorators.http import require_POST
 
-from .utils import calculate_salary_for_allocation, get_allocations_salary_sum_of_year, get_table_allocations, get_timeline_allocations
+from .utils import (
+    budget_usage_percent,
+    calculate_salary_for_allocation,
+    get_allocations_salary_sum_of_year,
+    get_table_allocations,
+    get_timeline_allocations,
+)
 
 
 def index(request: HttpRequest):
@@ -94,6 +103,43 @@ def details(request: HttpRequest, acronym: str):
     }
 
     return render(request, "projects/details.html", parameters)
+
+def other_budget_items(request: HttpRequest, acronym: str):
+    project = get_object_or_404(Project, acronym=acronym)
+    years = {int(year) for year in project.get_years()}
+
+    budget_items = list(project.otherbudgetitem_set.order_by("title"))
+    for item in budget_items:
+        item.transactions = sorted(item.get_transactions(), key=lambda t: (t.date, t.id))
+        for transaction in item.transactions:
+            # Only bookings within the project years count, as on the details page.
+            transaction.counts = transaction.date.year in years
+        item.used = sum((t.amount for t in item.transactions if t.counts), Decimal("0.00"))
+        item.remain = item.amount - item.used
+        item.usage_percent = budget_usage_percent(item.used, item.amount)
+
+    total_amount = sum((item.amount for item in budget_items), Decimal("0.00"))
+    total_used = sum((item.used for item in budget_items), Decimal("0.00"))
+    return render(request, "projects/other_budget_items.html", {
+        "project": project,
+        "budget_items": budget_items,
+        "total_amount": total_amount,
+        "total_used": total_used,
+        "total_remain": total_amount - total_used,
+        "total_percent": budget_usage_percent(total_used, total_amount),
+    })
+
+
+@require_POST
+def other_budget_transaction_description(request: HttpRequest, acronym: str, id: int):
+    transaction = get_object_or_404(
+        OtherBudgetItemTransaction.objects.select_related("budget_item"), id=id, budget_item__project__acronym=acronym,
+    )
+    transaction.description = request.POST.get("description", "").strip()
+    transaction.save(update_fields=["description"])
+    messages.success(request, f"Beschreibung für {transaction.budget_item.title} ({transaction.date:%d.%m.%Y}) gespeichert.")
+    return redirect(f"{reverse('projects:other_budget_items', args=[acronym])}#transaction-{transaction.id}")
+
 
 def staff_budget_item(request: HttpRequest, acronym: str, id: int):
     project = get_object_or_404(Project, acronym=acronym)

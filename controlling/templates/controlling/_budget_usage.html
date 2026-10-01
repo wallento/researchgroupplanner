@@ -1,0 +1,8 @@
+{% if percent is not None %}
+    <div class="text-nowrap">€&nbsp;{{ used }} / €&nbsp;{{ budget }} ({{ percent }}&nbsp;%)</div>
+    <div class="progress mt-1" role="progressbar" aria-label="Budgetnutzung" aria-valuenow="{{ percent|stringformat:'s' }}" aria-valuemin="0" aria-valuemax="100" style="height: 0.6rem; min-width: 8rem;">
+        <div class="progress-bar{% if percent > 100 %} bg-danger{% elif percent >= 90 %} bg-warning{% endif %}" style="width: {% if percent > 100 %}100{% else %}{{ percent|stringformat:'s' }}{% endif %}%"></div>
+    </div>
+{% else %}
+    €&nbsp;{{ used }} / –
+{% endif %}

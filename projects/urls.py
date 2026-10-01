@@ -7,5 +7,11 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("details/<str:acronym>/", views.details, name="details"),
     path("details/<str:acronym>/staff_budget_item/<int:id>/", views.staff_budget_item, name="staff_budget_item"),
+    path("details/<str:acronym>/nonpersonnel/", views.other_budget_items, name="other_budget_items"),
+    path(
+        "details/<str:acronym>/nonpersonnel/transaction/<int:id>/description/",
+        views.other_budget_transaction_description,
+        name="other_budget_transaction_description",
+    ),
     path("landesstelle/<int:id>/", views.landesstelle_detail, name="landesstelle_detail"),
 ]

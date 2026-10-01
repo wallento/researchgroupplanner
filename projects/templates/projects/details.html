@@ -30,7 +30,10 @@
     {% endif %}
 </table>
 
-<h2>Budgetposten</h2>
+<div class="d-flex justify-content-between align-items-center">
+    <h2>Budgetposten</h2>
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'projects:other_budget_items' project.acronym %}">Sachmittel-Übersicht</a>
+</div>
 
 <table class="table table-bordered" style="height: 100px;">
     <thead>
@@ -61,7 +64,7 @@
         {% endfor %}
         {% for budget in other_budget_items %}
             <tr>
-                <td>{{ budget.title }}</td>
+                <td><a href="{% url 'projects:other_budget_items' project.acronym %}#budget-{{ budget.id }}">{{ budget.title }}</a></td>
                 <td>€&nbsp;{{ budget.amount }}</td>
                 {% for year, amount in budget.years.items %}
                     <td>€&nbsp;{{ amount }}</td>

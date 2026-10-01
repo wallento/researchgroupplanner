@@ -41,7 +41,7 @@
                 <td>
                     {% for budget in project.otherbudgetitem_set.all %}
                         <div class="mb-2">
-                            <div>{{ budget.short_title }}:</div>
+                            <div><a href="{% url 'projects:other_budget_items' project.acronym %}#budget-{{ budget.id }}">{{ budget.short_title }}</a>:</div>
                             {% include "controlling/_budget_usage.html" with used=budget.used budget=budget.amount percent=budget.usage_percent %}
                         </div>
                     {% endfor %}
