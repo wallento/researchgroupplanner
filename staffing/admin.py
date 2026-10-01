@@ -8,8 +8,21 @@ class EmploymentInline(admin.StackedInline):
     extra = 0
 
 class StaffMemberAdmin(admin.ModelAdmin):
-    list_display = ('get_full_name', 'email', 'is_leadership', 'status')
-    fields = ('first_name', 'last_name', 'email', 'is_leadership', 'status')
+    list_display = (
+        'get_full_name',
+        'email',
+        'sap_business_partner',
+        'is_leadership',
+        'status',
+    )
+    fields = (
+        'first_name',
+        'last_name',
+        'email',
+        'sap_business_partner',
+        'is_leadership',
+        'status',
+    )
     inlines = [EmploymentInline]
     
     def get_full_name(self, obj):
@@ -21,6 +34,8 @@ admin.site.register(StaffMember, StaffMemberAdmin)
 class EmploymentSalariesInline(admin.TabularInline):
     model = EmploymentSalaries
     extra = 0
+    ordering = ("start_date", "end_date", "pk")
+    fields = ("salary", "is_exact_amount", "start_date", "end_date")
 
 
 class StaffFundingAllocationInline(admin.TabularInline):

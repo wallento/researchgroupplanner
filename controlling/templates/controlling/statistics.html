@@ -65,6 +65,53 @@
 {{ statistics_years|json_script:"stats-years" }}
 {{ statistics_yearly_values|json_script:"stats-yearly-values" }}
 
+{% if backup_enabled %}
+<div class="alert alert-warning mt-4" role="alert">
+    <strong>Datenbanksicherung:</strong>
+    Jetzt ein geprüftes SQLite-Backup{% if nextcloud_backup_enabled %} lokal und in Nextcloud{% else %} lokal{% endif %} erstellen.
+    <button id="createBackupBtn" class="btn btn-sm btn-warning ms-2">Backup jetzt erstellen</button>
+    <div id="createBackupResponse" class="mt-2"></div>
+</div>
+
+<script>
+    document.getElementById('createBackupBtn').addEventListener('click', function() {
+        const btn = this;
+        const responseDiv = document.getElementById('createBackupResponse');
+        btn.disabled = true;
+        btn.textContent = 'Backup läuft...';
+        responseDiv.replaceChildren();
+
+        fetch('{% url "create_manual_backup" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: ''
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            const result = document.createElement('div');
+            result.className = `alert ${ok && data.success ? 'alert-success' : 'alert-danger'}`;
+            result.setAttribute('role', 'alert');
+            result.textContent = data.message;
+            responseDiv.replaceChildren(result);
+        })
+        .catch(error => {
+            const result = document.createElement('div');
+            result.className = 'alert alert-danger';
+            result.setAttribute('role', 'alert');
+            result.textContent = `Fehler: ${error.message}`;
+            responseDiv.replaceChildren(result);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.textContent = 'Backup jetzt erstellen';
+        });
+    });
+</script>
+{% endif %}
+
 <!-- Temporary: Test Email Button -->
 <div class="alert alert-info mt-4" role="alert">
     <strong>⚙️ Test-Modus:</strong> E-Mail-Konfiguration testen

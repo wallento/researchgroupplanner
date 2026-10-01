@@ -9,9 +9,13 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+from sap_integration.workbooks import same_nonempty_workbook_content
+
 
 class WuerzburgWebGUIBackend:
     """Downloader for the SAP WebGUI layout used at Würzburg University."""
+
+    MAX_REPORT_DOWNLOAD_ATTEMPTS = 3
 
     REPORT_BUTTONS = {
         "budget": "M0:46:1::0:1-title",
@@ -31,13 +35,30 @@ class WuerzburgWebGUIBackend:
             self._open_report(driver, wait, year)
             reports = {}
             for report_name, button_id in self.REPORT_BUTTONS.items():
-                reports[report_name] = self._download_report(
-                    driver,
-                    wait,
-                    download_dir,
-                    report_name,
-                    button_id,
-                )
+                for attempt in range(self.MAX_REPORT_DOWNLOAD_ATTEMPTS):
+                    report_path = self._download_report(
+                        driver,
+                        wait,
+                        download_dir,
+                        report_name,
+                        button_id,
+                    )
+                    if not self._is_stale_transaction_export(
+                        report_name,
+                        report_path,
+                        reports,
+                    ):
+                        reports[report_name] = report_path
+                        break
+
+                    report_path.unlink()
+                    if attempt == self.MAX_REPORT_DOWNLOAD_ATTEMPTS - 1:
+                        raise ValueError(
+                            "SAP hat für Ist und Obligo denselben nicht-leeren "
+                            "Export geliefert. Der Bericht wurde beim Umschalten "
+                            "nicht rechtzeitig aktualisiert."
+                        )
+                    time.sleep(max(self.config.action_delay, 2) * (attempt + 1))
             return reports
         finally:
             driver.quit()
@@ -106,6 +127,10 @@ class WuerzburgWebGUIBackend:
     ):
         known_files = set(download_dir.iterdir())
         self._click(driver, wait, By.ID, button_id)
+        # SAP updates the report asynchronously. The toolbar remains clickable
+        # while it still points at the preceding report, so allow the table to
+        # settle before opening the export dialog.
+        time.sleep(max(self.config.action_delay, 1))
         self._click(driver, wait, By.XPATH, "//*[contains(@id, '_MB_EXPORT')]")
         self._click(
             driver,
@@ -120,6 +145,14 @@ class WuerzburgWebGUIBackend:
         destination = download_dir / f"{report_name}.xlsx"
         exported_file.replace(destination)
         return destination
+
+    @staticmethod
+    def _is_stale_transaction_export(report_name, report_path, reports):
+        return (
+            report_name == "commitments"
+            and "actual" in reports
+            and same_nonempty_workbook_content(reports["actual"], report_path)
+        )
 
     def _wait_for_download(self, download_dir, known_files):
         deadline = time.monotonic() + self.config.timeout

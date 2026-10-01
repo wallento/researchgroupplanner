@@ -1,9 +1,9 @@
 from decimal import Decimal
 from typing import Literal
 from .models import Project, StaffBudgetItem
-from staffing.models import EmploymentSalaries, StaffFundingAllocation
+from staffing.models import StaffFundingAllocation
+from staffing.utils import get_salary_amounts_by_month
 from dateutil.relativedelta import relativedelta
-from calendar import monthrange
 
 from dataclasses import dataclass
 
@@ -15,39 +15,30 @@ class SalaryAllocation:
 
 
 def calculate_salary_for_allocation(allocation: StaffFundingAllocation):
-    salaries = EmploymentSalaries.objects.filter(employment=allocation.employment).order_by('start_date')
-    total_salary = 0
+    salaries = allocation.employment.employmentsalaries_set.order_by('start_date')
+    total_salary = Decimal("0.00")
 
     months = {}
 
     for salary in salaries:
-        salary_start = salary.start_date
-        salary_end = salary.end_date
-
         allocation_end = allocation.end_date or allocation.employment.end_date
-        period_start = max(salary_start, allocation.start_date)
-        period_end = min(salary_end, allocation_end)
-
-        if period_end < period_start:
-            continue
-
-        current = period_start.replace(day=1)
-
-        while current <= period_end:
-            key = current.strftime("%Y-%m")
-            current_salary = salary.salary
-
+        period_start = max(allocation.start_date, allocation.employment.start_date)
+        period_end = min(allocation_end, allocation.employment.end_date)
+        salary_months = get_salary_amounts_by_month(
+            salary,
+            period_start,
+            period_end,
+        )
+        for key, current_salary in salary_months.items():
             # Allocation percentage scales contract salary to source-specific cost.
             if allocation.employment.percentage:
-                current_salary *= Decimal(allocation.percentage) / Decimal(allocation.employment.percentage)
-
-            if current.month == period_start.month and period_start.day != 1:
-                days_in_month = monthrange(current.year, current.month)[1]
-                current_salary *= Decimal((days_in_month - period_start.day + 1) / days_in_month)
-                current_salary = current_salary.quantize(Decimal('0.01'))
+                current_salary = (
+                    current_salary
+                    * Decimal(allocation.percentage)
+                    / Decimal(allocation.employment.percentage)
+                ).quantize(Decimal("0.01"))
             months[key] = months.get(key, 0) + current_salary
             total_salary += current_salary
-            current += relativedelta(months=1)
 
     return SalaryAllocation(allocation, total_salary, months)
 

@@ -9,6 +9,16 @@ class StaffMember(models.Model):
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     email = models.EmailField(blank=True, default='')
+    sap_business_partner = models.CharField(
+        "SAP-Geschäftspartner",
+        max_length=255,
+        blank=True,
+        default="",
+        help_text=(
+            "Optionaler Name aus dem SAP-Kontoauszug. Ohne Eintrag wird die "
+            "Zuordnung automatisch über Vor- und Nachname versucht."
+        ),
+    )
     is_leadership = models.BooleanField(default=False, help_text="Person hat Leitungsfunktion (z.B. Professor)")
     status = models.CharField(max_length=20, choices={
         'in_hire': 'Einstellung',
@@ -35,8 +45,34 @@ class Employment(models.Model):
 class EmploymentSalaries(models.Model):
     employment = models.ForeignKey(Employment, on_delete=models.CASCADE, null=True, blank=True)
     salary = models.DecimalField(max_digits=10, decimal_places=2)
+    is_exact_amount = models.BooleanField(
+        "Exakter Betrag?",
+        default=False,
+        help_text=(
+            "Der Betrag gilt vollständig für den angegebenen Teilzeitraum und "
+            "wird nicht tagesanteilig berechnet."
+        ),
+    )
     start_date = models.DateField()
     end_date = models.DateField()
+
+    def clean(self):
+        super().clean()
+        if not self.start_date or not self.end_date:
+            return
+        if self.end_date < self.start_date:
+            raise ValidationError("Das Enddatum darf nicht vor dem Startdatum liegen.")
+        if self.is_exact_amount and (
+            self.start_date.year,
+            self.start_date.month,
+        ) != (
+            self.end_date.year,
+            self.end_date.month,
+        ):
+            raise ValidationError(
+                "Ein exakter Betrag muss vollständig innerhalb eines "
+                "Kalendermonats liegen."
+            )
 
     def __str__(self):
         return f"{self.employment.staff_member} ({self.start_date} - {self.end_date}, € {self.salary})"
@@ -50,6 +86,7 @@ class StaffFundingAllocation(models.Model):
     budget_item = models.ForeignKey(StaffBudgetItem, on_delete=models.CASCADE, null=True, blank=True)
     landesstelle = models.ForeignKey(Landesstelle, on_delete=models.CASCADE, null=True, blank=True)
     annual_pool_budget = models.ForeignKey(AnnualPoolBudget, on_delete=models.CASCADE, null=True, blank=True)
+    is_universal = models.BooleanField("Universalprojekt", default=False)
     percentage = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -68,12 +105,17 @@ class StaffFundingAllocation(models.Model):
     def clean(self):
         super().clean()
         source_count = sum(
-            source is not None
-            for source in (self.budget_item, self.landesstelle, self.annual_pool_budget)
+            (
+                self.budget_item is not None,
+                self.landesstelle is not None,
+                self.annual_pool_budget is not None,
+                self.is_universal,
+            )
         )
         if source_count != 1:
             raise ValidationError(
-                "Bitte genau eine Finanzierungsquelle angeben: Projektbudget, Landesstelle oder Annual Pool Budget."
+                "Bitte genau eine Finanzierungsquelle angeben: Projektbudget, "
+                "Landesstelle, Annual Pool Budget oder Universalprojekt."
             )
         if self.end_date and self.end_date < self.start_date:
             raise ValidationError("Das Enddatum darf nicht vor dem Startdatum liegen.")
@@ -91,7 +133,9 @@ class StaffFundingAllocation(models.Model):
             return self.budget_item
         if self.landesstelle:
             return self.landesstelle
-        return self.annual_pool_budget
+        if self.annual_pool_budget:
+            return self.annual_pool_budget
+        return "Universalprojekt"
 
     def __str__(self):
         end_date = self.end_date if self.end_date else "offen"

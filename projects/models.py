@@ -175,6 +175,14 @@ class SAPFund(models.Model):
     label = models.CharField("Bezeichnung", max_length=200, blank=True)
     is_active = models.BooleanField("Aktiv", default=True)
     is_universal = models.BooleanField("Universalprojekt", default=False)
+    treat_negative_actuals_as_funding = models.BooleanField(
+        "Negative Ist-Buchungen als Mittelzuflüsse behandeln",
+        default=False,
+        help_text=(
+            "Nach dem Entfernen von Gegenbuchungen werden verbleibende negative "
+            "Ist-Buchungen angezeigt, aber nicht als Ausgaben verrechnet."
+        ),
+    )
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,

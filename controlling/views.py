@@ -7,6 +7,7 @@ from projects.models import AnnualPool, Landesstelle, OverheadBudgetItemShare, P
 from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
 from staffing.utils import get_salaries_by_month
 from django.conf import settings
+from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
@@ -20,6 +21,13 @@ from django.views.decorators.http import require_POST
 from django.db.models import Sum
 
 from projects.utils import calculate_salary_for_allocation
+from sap_integration.cache import SAPCacheError
+from sap_integration.salary_sync import (
+    apply_salary_comparison,
+    build_salary_comparisons,
+    find_salary_comparison,
+)
+from controlling.backups import BackupError, perform_database_backup
 
 
 def _month_iter(start_date, end_date):
@@ -32,6 +40,108 @@ def _month_iter(start_date, end_date):
 
 def _month_key(date_obj):
     return date_obj.strftime("%Y-%m")
+
+
+def _allocation_coverage_periods(employment, allocations):
+    expected = Decimal(employment.percentage)
+    under_days = []
+    over_days = []
+    current = employment.start_date
+
+    while current <= employment.end_date:
+        total = sum(
+            (
+                Decimal(allocation.percentage)
+                for allocation in allocations
+                if allocation.start_date <= current
+                and (allocation.end_date or employment.end_date) >= current
+            ),
+            Decimal("0.00"),
+        )
+        if total < expected:
+            under_days.append((current, total))
+        elif total > expected:
+            over_days.append((current, total))
+        current += timedelta(days=1)
+
+    return _group_allocation_days(under_days), _group_allocation_days(over_days)
+
+
+def _group_allocation_days(days):
+    periods = []
+    for current, percentage in days:
+        if (
+            periods
+            and periods[-1]["end"] + timedelta(days=1) == current
+            and periods[-1]["percentage"] == percentage
+        ):
+            periods[-1]["end"] = current
+        else:
+            periods.append(
+                {
+                    "start": current,
+                    "end": current,
+                    "percentage": percentage,
+                }
+            )
+    return periods
+
+
+def _allocation_period_label(period):
+    start = period["start"].strftime("%d.%m.%Y")
+    end = period["end"].strftime("%d.%m.%Y")
+    date_label = start if start == end else f"{start}–{end}"
+    return f"{date_label} ({_decimal_2(period['percentage'])}%)"
+
+
+def _decimal_2(value):
+    return format(Decimal(value), ".2f")
+
+
+def _salary_comparison_detail(comparison):
+    if comparison.source_conflict:
+        detail = (
+            f"{comparison.month_label}: SAP-Ist "
+            f"{_decimal_2(comparison.actual_amount)} EUR, SAP-Obligo "
+            f"{_decimal_2(comparison.commitment_amount)} EUR, Planung "
+            f"{_decimal_2(comparison.planned)} EUR."
+        )
+    else:
+        detail = (
+            f"{comparison.month_label}: {comparison.source_label} "
+            f"{_decimal_2(comparison.sap_amount)} EUR, Planung "
+            f"{_decimal_2(comparison.planned)} EUR, Differenz "
+            f"{_decimal_2(comparison.difference)} EUR."
+        )
+    if comparison.blocking_reason:
+        detail += f" {comparison.blocking_reason}"
+    return detail
+
+
+def _salary_comparison_summary(comparisons):
+    sap_total = sum(
+        (comparison.sap_amount for comparison in comparisons),
+        Decimal("0.00"),
+    )
+    planned_total = sum(
+        (comparison.planned for comparison in comparisons),
+        Decimal("0.00"),
+    )
+    difference = sap_total - planned_total
+    if len(comparisons) == 1:
+        period = comparisons[0].month_label
+    else:
+        period = (
+            f"{comparisons[0].month_label} bis "
+            f"{comparisons[-1].month_label}"
+        )
+    return {
+        "period": period,
+        "sap_total": _decimal_2(sap_total),
+        "planned_total": _decimal_2(planned_total),
+        "difference": _decimal_2(difference),
+        "is_balanced": difference.quantize(Decimal("0.01")) == 0,
+    }
 
 
 def _project_overhead_available_sum(project):
@@ -90,12 +200,14 @@ def warnings(request):
             projected_sum += calculate_salary_for_allocation(allocation).salary_sum
 
         if projected_sum > budget_item.amount:
+            difference = (projected_sum - budget_item.amount).quantize(Decimal("0.01"))
             warnings_list.append({
                 "severity": "danger",
                 "title": f"Budgetüberziehung Personalbudget: {budget_item.title}",
                 "detail": (
-                    f"Geplante Personalkosten {projected_sum} EUR überschreiten Budget {budget_item.amount} EUR "
-                    f"(Projekt {budget_item.project.acronym})."
+                    f"Geplante Personalkosten {_decimal_2(projected_sum)} EUR überschreiten Budget "
+                    f"{_decimal_2(budget_item.amount)} EUR (Differenz: {_decimal_2(difference)} EUR; "
+                    f"Projekt {budget_item.project.acronym})."
                 ),
                 "link": f"/projects/details/{budget_item.project.acronym}/",
             })
@@ -113,8 +225,8 @@ def warnings(request):
                         "severity": "warning",
                         "title": f"Overhead-Verteilung unvollständig: {project.acronym}",
                         "detail": (
-                            f"Der Overhead-Posten ({overhead_item.amount} EUR) ist aktuell mit "
-                            f"{distributed_percentage}% verteilt. Erwartet sind 100%."
+                            f"Der Overhead-Posten ({_decimal_2(overhead_item.amount)} EUR) ist aktuell mit "
+                            f"{_decimal_2(distributed_percentage)}% verteilt. Erwartet sind 100%."
                         ),
                         "link": f"/projects/details/{project.acronym}/",
                     })
@@ -130,8 +242,8 @@ def warnings(request):
                 "severity": "warning",
                 "title": f"Budgetsumme ungleich Fördersumme: {project.acronym}",
                 "detail": (
-                    f"Einzelsummen ergeben {planned_total} EUR, Fördersumme ist {project.budget_total} EUR "
-                    f"(Differenz: {diff} EUR)."
+                    f"Einzelsummen ergeben {_decimal_2(planned_total)} EUR, Fördersumme ist "
+                    f"{_decimal_2(project.budget_total)} EUR (Differenz: {_decimal_2(diff)} EUR)."
                 ),
                 "link": f"/projects/details/{project.acronym}/",
             })
@@ -160,7 +272,8 @@ def warnings(request):
                 "severity": "danger",
                 "title": f"Budgetüberziehung Projekt: {project.acronym}",
                 "detail": (
-                    f"Allokiert/gebunden {total_allocated} EUR bei Gesamtbudget {project.budget_total} EUR."
+                    f"Allokiert/gebunden {_decimal_2(total_allocated)} EUR bei Gesamtbudget "
+                    f"{_decimal_2(project.budget_total)} EUR."
                 ),
                 "link": f"/projects/details/{project.acronym}/",
             })
@@ -170,8 +283,9 @@ def warnings(request):
                 "severity": "success",
                 "title": f"Restbudget vorhanden: {project.acronym}",
                 "detail": (
-                    f"Aktuell sind noch {remaining} EUR Restbudget verfügbar "
-                    f"(allokiert/gebunden: {total_allocated} EUR von {project.budget_total} EUR)."
+                    f"Aktuell sind noch {_decimal_2(remaining)} EUR Restbudget verfügbar "
+                    f"(allokiert/gebunden: {_decimal_2(total_allocated)} EUR von "
+                    f"{_decimal_2(project.budget_total)} EUR)."
                 ),
                 "link": f"/projects/details/{project.acronym}/",
             })
@@ -256,8 +370,9 @@ def warnings(request):
                     "severity": "warning",
                     "title": f"Überlappende Gehaltssätze: {employment.staff_member}",
                     "detail": (
-                        f"Gehalt {current.start_date} - {current.end_date} ({current.salary} €) überlappt mit "
-                        f"{following.start_date} - {following.end_date} ({following.salary} €) "
+                        f"Gehalt {current.start_date} - {current.end_date} ({_decimal_2(current.salary)} €) "
+                        f"überlappt mit {following.start_date} - {following.end_date} "
+                        f"({_decimal_2(following.salary)} €) "
                         f"im Zeitraum {overlap_start} - {overlap_end}."
                     ),
                     "link": f"/staffing/details/{employment.staff_member.id}/",
@@ -272,59 +387,65 @@ def warnings(request):
 
     for employment in employments:
         allocations = list(employment.stafffundingallocation_set.all())
-        expected = Decimal(employment.percentage)
 
         if not allocations:
             warnings_list.append({
                 "severity": "warning",
                 "title": f"Keine Zuordnung für {employment.staff_member}",
                 "detail": (
-                    f"Die Anstellung ({employment.start_date} - {employment.end_date}, {employment.percentage}%) "
+                    f"Die Anstellung ({employment.start_date} - {employment.end_date}, "
+                    f"{_decimal_2(employment.percentage)}%) "
                     "hat keine Finanzierungszuordnungen."
                 ),
                 "link": f"/staffing/details/{employment.staff_member.id}/",
             })
             continue
 
-        under_months = []
-        over_months = []
+        under_periods, over_periods = _allocation_coverage_periods(
+            employment,
+            allocations,
+        )
 
-        # Compare per month contract percentage vs summed allocations.
-        for month in _month_iter(employment.start_date, employment.end_date):
-            total = Decimal("0.00")
-            for allocation in allocations:
-                alloc_start = allocation.start_date
-                alloc_end = allocation.end_date or employment.end_date
-                if alloc_start.replace(day=1) <= month <= alloc_end.replace(day=1):
-                    total += Decimal(allocation.percentage)
-
-            if total < expected:
-                under_months.append((_month_key(month), total))
-            elif total > expected:
-                over_months.append((_month_key(month), total))
-
-        if under_months:
-            sample = ", ".join(f"{m} ({p}%)" for m, p in under_months[:4])
-            if len(under_months) > 4:
+        if under_periods:
+            sample = ", ".join(
+                _allocation_period_label(period)
+                for period in under_periods[:4]
+            )
+            if len(under_periods) > 4:
                 sample += ", ..."
+            period_count = (
+                "1 Zeitraum liegt"
+                if len(under_periods) == 1
+                else f"{len(under_periods)} Zeiträume liegen"
+            )
             warnings_list.append({
                 "severity": "warning",
                 "title": f"Unterallokation bei {employment.staff_member}",
                 "detail": (
-                    f"{len(under_months)} Monat(e) liegen unter dem Vertragsanteil von {employment.percentage}%: {sample}"
+                    f"{period_count} unter dem Vertragsanteil von "
+                    f"{_decimal_2(employment.percentage)}%: {sample}"
                 ),
                 "link": f"/staffing/details/{employment.staff_member.id}/",
             })
 
-        if over_months:
-            sample = ", ".join(f"{m} ({p}%)" for m, p in over_months[:4])
-            if len(over_months) > 4:
+        if over_periods:
+            sample = ", ".join(
+                _allocation_period_label(period)
+                for period in over_periods[:4]
+            )
+            if len(over_periods) > 4:
                 sample += ", ..."
+            period_count = (
+                "1 Zeitraum liegt"
+                if len(over_periods) == 1
+                else f"{len(over_periods)} Zeiträume liegen"
+            )
             warnings_list.append({
                 "severity": "danger",
                 "title": f"Überallokation bei {employment.staff_member}",
                 "detail": (
-                    f"{len(over_months)} Monat(e) liegen über dem Vertragsanteil von {employment.percentage}%: {sample}"
+                    f"{period_count} über dem Vertragsanteil von "
+                    f"{_decimal_2(employment.percentage)}%: {sample}"
                 ),
                 "link": f"/staffing/details/{employment.staff_member.id}/",
             })
@@ -337,7 +458,8 @@ def warnings(request):
                     "severity": "warning",
                     "title": f"Zuordnung außerhalb der Vertragslaufzeit ({employment.staff_member})",
                     "detail": (
-                        f"Zuordnung {allocation.percentage}% läuft von {allocation.start_date} bis {alloc_end}, "
+                        f"Zuordnung {_decimal_2(allocation.percentage)}% läuft von "
+                        f"{allocation.start_date} bis {alloc_end}, "
                         f"Vertrag aber nur von {employment.start_date} bis {employment.end_date}."
                     ),
                     "link": f"/staffing/details/{employment.staff_member.id}/",
@@ -351,7 +473,8 @@ def warnings(request):
                         "severity": "warning",
                         "title": f"Zuordnung außerhalb Projektlaufzeit ({project.acronym})",
                         "detail": (
-                            f"Zuordnung {allocation.percentage}% ({allocation.start_date} - {alloc_end}) "
+                            f"Zuordnung {_decimal_2(allocation.percentage)}% "
+                            f"({allocation.start_date} - {alloc_end}) "
                             f"liegt außerhalb Projektzeitraum {project.start_date} - {project_end}."
                         ),
                         "link": f"/projects/details/{project.acronym}/",
@@ -383,7 +506,8 @@ def warnings(request):
                         "severity": "warning",
                         "title": f"Zuordnung außerhalb Annual-Pool-Jahr ({pool_budget.annual_pool.title})",
                         "detail": (
-                            f"Zuordnung {allocation.percentage}% ({allocation.start_date} - {alloc_end}) "
+                            f"Zuordnung {_decimal_2(allocation.percentage)}% "
+                            f"({allocation.start_date} - {alloc_end}) "
                             f"liegt nicht vollständig im Budgetjahr {pool_budget.year}."
                         ),
                         "link": "/admin/projects/annualpool/",
@@ -398,7 +522,11 @@ def warnings(request):
                 "detail": "Person ist als Alumni markiert, hat aber aktive Anstellung(en).",
                 "link": f"/staffing/details/{staff_member.id}/",
             })
-        if staff_member.status in {"active", "in_hire"} and not active_employments:
+        if (
+            staff_member.status in {"active", "in_hire"}
+            and not staff_member.is_leadership
+            and not active_employments
+        ):
             warnings_list.append({
                 "severity": "warning",
                 "title": f"Status-Inkonsistenz bei {staff_member}",
@@ -409,6 +537,72 @@ def warnings(request):
     if settings.SAP_GM_IMPORT_ENABLED:
         warnings_list.extend(_sap_reconciliation_warnings())
 
+    if settings.SAP_ENABLED:
+        try:
+            salary_result = build_salary_comparisons(settings.SAP_DATA_DIR)
+        except (OSError, ValueError, SAPCacheError) as error:
+            warnings_list.append({
+                "severity": "warning",
+                "title": "SAP-Gehaltsvergleich nicht möglich",
+                "detail": str(error),
+                "link": "/ist-stand/",
+            })
+        else:
+            for partner_name, month_count in salary_result.unmatched_partners.items():
+                warnings_list.append({
+                    "severity": "warning",
+                    "title": f"SAP-Geschäftspartner nicht zugeordnet: {partner_name}",
+                    "detail": (
+                        f"Für {month_count} Gehaltsmonat(e) wurde keine Person gefunden. "
+                        "Bitte den SAP-Geschäftspartner beim Mitarbeitenden hinterlegen."
+                    ),
+                    "link": "/admin/staffing/staffmember/",
+                })
+            for partner_name, month_count in salary_result.ambiguous_partners.items():
+                warnings_list.append({
+                    "severity": "warning",
+                    "title": f"SAP-Geschäftspartner mehrdeutig: {partner_name}",
+                    "detail": (
+                        f"Für {month_count} Gehaltsmonat(e) passen mehrere Personen. "
+                        "Bitte die SAP-Geschäftspartner-Zuordnung eindeutig konfigurieren."
+                    ),
+                    "link": "/admin/staffing/staffmember/",
+                })
+            salary_groups = {}
+            for comparison in salary_result.comparisons:
+                if comparison.sap_amount == comparison.planned and not comparison.source_conflict:
+                    continue
+                group = salary_groups.setdefault(
+                    comparison.staff_member.id,
+                    {
+                        "staff_member": comparison.staff_member,
+                        "comparisons": [],
+                    },
+                )
+                group["comparisons"].append(comparison)
+
+            for group in salary_groups.values():
+                comparisons = sorted(
+                    group["comparisons"],
+                    key=lambda comparison: comparison.month,
+                )
+                applicable_count = sum(
+                    comparison.can_apply for comparison in comparisons
+                )
+                warnings_list.append({
+                    "severity": "warning",
+                    "title": f"SAP-Gehaltsabweichungen bei {group['staff_member']}",
+                    "details": [
+                        _salary_comparison_detail(comparison)
+                        for comparison in comparisons
+                    ],
+                    "sap_salary_summary": _salary_comparison_summary(comparisons),
+                    "link": f"/staffing/details/{group['staff_member'].id}/",
+                    "sap_salary_bulk_update": (
+                        group["staff_member"].id if applicable_count else None
+                    ),
+                    "sap_salary_update_count": applicable_count,
+                })
     severity_order = {"danger": 0, "warning": 1, "info": 2, "success": 3}
     warnings_list.sort(key=lambda item: (severity_order.get(item["severity"], 99), item["title"]))
 
@@ -490,6 +684,104 @@ def merge_salary_overlap(request, current_id, following_id):
         for entry in new_salaries:
             EmploymentSalaries.objects.create(employment=employment, **entry)
 
+    return redirect("warnings")
+
+
+@login_required
+@require_POST
+def apply_sap_salary(request, staff_id, year, month):
+    if not settings.SAP_ENABLED:
+        messages.error(request, "Die SAP-Integration ist deaktiviert.")
+        return redirect("warnings")
+    if not 1 <= month <= 12:
+        messages.error(request, "Ungültiger Gehaltsmonat.")
+        return redirect("warnings")
+
+    try:
+        comparison = find_salary_comparison(
+            settings.SAP_DATA_DIR,
+            staff_id,
+            year,
+            month,
+        )
+        if comparison is None:
+            messages.error(
+                request,
+                "Der SAP-Istwert wurde nicht mehr gefunden. Bitte die Warnungen neu laden.",
+            )
+        elif comparison.source_conflict:
+            messages.error(request, comparison.blocking_reason)
+        elif comparison.sap_amount == comparison.planned:
+            messages.info(
+                request,
+                f"Planung und {comparison.source_label} stimmen bereits überein.",
+            )
+        else:
+            apply_salary_comparison(comparison)
+            messages.success(
+                request,
+                f"{comparison.source_label} für {comparison.staff_member}, "
+                f"{comparison.month_label}, wurde in die Planung übernommen.",
+            )
+    except (OSError, ValueError, SAPCacheError) as error:
+        messages.error(request, str(error))
+    return redirect("warnings")
+
+
+@login_required
+@require_POST
+def apply_all_sap_salaries(request, staff_id):
+    if not settings.SAP_ENABLED:
+        messages.error(request, "Die SAP-Integration ist deaktiviert.")
+        return redirect("warnings")
+
+    try:
+        result = build_salary_comparisons(settings.SAP_DATA_DIR)
+        differing = [
+            comparison
+            for comparison in result.comparisons
+            if comparison.staff_member.id == staff_id
+            and (
+                comparison.sap_amount != comparison.planned
+                or comparison.source_conflict
+            )
+        ]
+        applicable = [
+            comparison for comparison in differing if comparison.can_apply
+        ]
+        blocked_count = len(differing) - len(applicable)
+
+        if not differing:
+            messages.info(
+                request,
+                "Für diese Person sind keine SAP-Gehaltsabweichungen mehr vorhanden.",
+            )
+            return redirect("warnings")
+        if not applicable:
+            messages.error(
+                request,
+                "Keine der aufgeführten Abweichungen kann sicher übernommen werden.",
+            )
+            return redirect("warnings")
+
+        with transaction.atomic():
+            for comparison in sorted(applicable, key=lambda item: item.month):
+                apply_salary_comparison(comparison)
+
+        staff_member = applicable[0].staff_member
+        messages.success(
+            request,
+            f"{len(applicable)} SAP-Gehaltsmonat(e) für {staff_member} wurden "
+            "in die Planung übernommen.",
+        )
+        if blocked_count:
+            messages.warning(
+                request,
+                f"{blocked_count} Monat(e) wurden wegen Konflikten oder "
+                "unsicherer Zuordnung nicht verändert.",
+            )
+    except (OSError, ValueError, SAPCacheError) as error:
+        messages.error(request, str(error))
     return redirect("warnings")
 
 
@@ -609,6 +901,10 @@ def statistics(request):
         "overhead_rows": overhead_rows,
         "overhead_totals": overhead_totals_list,
         "overhead_overall_total": overhead_overall_total,
+        "backup_enabled": settings.DB_BACKUP_ENABLED and request.user.is_staff,
+        "nextcloud_backup_enabled": bool(
+            settings.NEXTCLOUD_BACKUP_SHARE_URL.strip()
+        ),
     })
 
 
@@ -722,6 +1018,8 @@ def main(request):
                 source = f"Projekt {allocation.budget_item.project.acronym}"
             elif allocation.annual_pool_budget_id:
                 source = f"Annual Pool {allocation.annual_pool_budget.annual_pool.title} ({allocation.annual_pool_budget.year})"
+            elif allocation.is_universal:
+                source = "Universalprojekt"
             else:
                 institute = f" ({allocation.landesstelle.institute.short_name})" if allocation.landesstelle.institute_id else ""
                 source = f"Landesstelle {allocation.landesstelle.title}{institute}"
@@ -731,7 +1029,8 @@ def main(request):
                 continue
 
             allocation_lines.append(
-                f"- {source}: {allocation.percentage}% ({allocation.start_date} - {alloc_end})"
+                f"- {source}: {_decimal_2(allocation.percentage)}% "
+                f"({allocation.start_date} - {alloc_end})"
             )
 
         allocation_html = "<br>".join(allocation_lines) if allocation_lines else "Keine Zuordnungen"
@@ -740,10 +1039,11 @@ def main(request):
             'staff': staff_name,
             'staff_id': employment.staff_member.id,
             'percentage': employment.percentage,
-            'label': f"Vertrag {employment.percentage}%",
+            'label': f"Vertrag {_decimal_2(employment.percentage)}%",
             'tooltip_html': (
                 f"<strong>{staff_name}</strong><br>"
-                f"Vertrag: {employment.get_category()} ({employment.percentage}%)<br>"
+                f"Vertrag: {employment.get_category()} "
+                f"({_decimal_2(employment.percentage)}%)<br>"
                 f"{employment.start_date} - {employment.end_date}<br><br>"
                 f"<strong>Zuordnungen:</strong><br>{allocation_html}"
             ),
@@ -831,3 +1131,33 @@ Das Research Group Planning System"""
             })
     
     return JsonResponse({'success': False, 'message': 'POST erforderlich'})
+
+
+@staff_member_required
+@require_POST
+def create_manual_backup(request):
+    if not settings.DB_BACKUP_ENABLED:
+        return JsonResponse({
+            "success": False,
+            "message": "Datenbank-Backups sind nicht aktiviert.",
+        }, status=400)
+
+    try:
+        result = perform_database_backup(kind="manual")
+    except (BackupError, OSError, ValueError) as error:
+        return JsonResponse({
+            "success": False,
+            "message": str(error),
+        }, status=500)
+
+    destination = (
+        "lokal und in Nextcloud"
+        if result.uploaded_to_nextcloud
+        else "lokal"
+    )
+    return JsonResponse({
+        "success": True,
+        "message": (
+            f"Backup {result.path.name} wurde erfolgreich {destination} gespeichert."
+        ),
+    })

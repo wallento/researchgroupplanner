@@ -42,6 +42,8 @@
                     Projekt {{ allocation.budget_item.project.acronym }} - {{ allocation.budget_item.title }}
                   {% elif allocation.annual_pool_budget_id %}
                     Annual Pool {{ allocation.annual_pool_budget.annual_pool.title }} ({{ allocation.annual_pool_budget.year }})
+                  {% elif allocation.is_universal %}
+                    Universalprojekt
                   {% else %}
                     Landesstelle {{ allocation.landesstelle.title }}
                   {% endif %}

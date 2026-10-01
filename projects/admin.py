@@ -44,7 +44,12 @@ class ProjectSAPFundInlineAdmin(admin.TabularInline):
     model = SAPFund
     fk_name = "project"
     extra = 1
-    fields = ("fund_number", "label", "is_active")
+    fields = (
+        "fund_number",
+        "label",
+        "treat_negative_actuals_as_funding",
+        "is_active",
+    )
 
 
 class ProjectAdmin(admin.ModelAdmin):
@@ -93,7 +98,12 @@ class AnnualPoolSAPFundInlineAdmin(admin.TabularInline):
     model = SAPFund
     fk_name = "annual_pool"
     extra = 1
-    fields = ("fund_number", "label", "is_active")
+    fields = (
+        "fund_number",
+        "label",
+        "treat_negative_actuals_as_funding",
+        "is_active",
+    )
 
 
 @admin.register(AnnualPool)
@@ -110,8 +120,19 @@ class AnnualPoolBudgetAdmin(admin.ModelAdmin):
 
 @admin.register(SAPFund)
 class SAPFundAdmin(admin.ModelAdmin):
-    list_display = ("fund_number", "label", "owner", "is_universal", "is_active")
-    list_filter = ("is_universal", "is_active")
+    list_display = (
+        "fund_number",
+        "label",
+        "owner",
+        "treat_negative_actuals_as_funding",
+        "is_universal",
+        "is_active",
+    )
+    list_filter = (
+        "treat_negative_actuals_as_funding",
+        "is_universal",
+        "is_active",
+    )
     search_fields = ("fund_number", "label", "project__acronym", "annual_pool__title")
 
     @admin.display(description="Zuordnung")

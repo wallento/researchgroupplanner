@@ -20,7 +20,17 @@ from django.conf import settings
 from django.urls import include, path
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 
-from controlling.views import annual_pools as controlling_annual_pools, main as controlling_main, warnings as controlling_warnings, statistics as controlling_statistics, send_test_email, merge_salary_overlap as controlling_merge_salary_overlap
+from controlling.views import (
+    annual_pools as controlling_annual_pools,
+    apply_all_sap_salaries as controlling_apply_all_sap_salaries,
+    apply_sap_salary as controlling_apply_sap_salary,
+    create_manual_backup,
+    main as controlling_main,
+    merge_salary_overlap as controlling_merge_salary_overlap,
+    send_test_email,
+    statistics as controlling_statistics,
+    warnings as controlling_warnings,
+)
 
 urlpatterns = [
     path(
@@ -39,8 +49,19 @@ urlpatterns = [
         controlling_merge_salary_overlap,
         name="merge_salary_overlap",
     ),
+    path(
+        "warnings/apply-sap-salary/<int:staff_id>/<int:year>/<int:month>/",
+        controlling_apply_sap_salary,
+        name="apply_sap_salary",
+    ),
+    path(
+        "warnings/apply-sap-salaries/<int:staff_id>/",
+        controlling_apply_all_sap_salaries,
+        name="apply_all_sap_salaries",
+    ),
     path("statistics/", controlling_statistics, name="statistics"),
     path("send-test-email/", send_test_email, name="send_test_email"),
+    path("create-backup/", create_manual_backup, name="create_manual_backup"),
     path("annual-pools/", controlling_annual_pools, name="annual_pools"),
     path("staffing/", include("staffing.urls")),
     path("projects/", include("projects.urls")),

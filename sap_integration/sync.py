@@ -7,6 +7,8 @@ from pathlib import Path
 
 from django.utils.module_loading import import_string
 
+from sap_integration.workbooks import same_nonempty_workbook_content
+
 
 @dataclass(frozen=True)
 class SAPSyncResult:
@@ -46,6 +48,10 @@ def _validate_reports(reports):
         report_path = Path(report_path)
         if not report_path.is_file() or report_path.stat().st_size == 0:
             raise ValueError(f"Ungültiger SAP-Export: {report_path.name}")
+    if same_nonempty_workbook_content(reports["actual"], reports["commitments"]):
+        raise ValueError(
+            "SAP hat für Ist und Obligo denselben nicht-leeren Export geliefert."
+        )
 
 
 def _write_status(data_dir, year, reports, completed_at):

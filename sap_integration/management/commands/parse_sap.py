@@ -33,7 +33,9 @@ class Command(BaseCommand):
                 fund_numbers,
             )
         except Exception as error:
-            raise CommandError(f"SAP-Parsing fehlgeschlagen: {error}") from error
+            raise CommandError(
+                f"SAP-Parsing fehlgeschlagen ({type(error).__name__}): {error}"
+            ) from error
         self.stdout.write(
             self.style.SUCCESS(
                 f"SAP-Daten für {year} und {len(fund_numbers)} Fonds aufbereitet: {target_path}"

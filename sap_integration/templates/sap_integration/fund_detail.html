@@ -1,8 +1,8 @@
 {% extends "controlling/base.html" %}
 {% load l10n %}
 
-{% block title %}Kontoauszug {{ fund.fund_number }}{% endblock %}
-{% block heading %}Kontoauszug {{ fund.fund_number }}{% endblock %}
+{% block title %}{% if is_clean %}Bereinigter {% endif %}Kontoauszug {{ fund.fund_number }}{% endblock %}
+{% block heading %}{% if is_clean %}Bereinigter {% endif %}Kontoauszug {{ fund.fund_number }}{% endblock %}
 
 {% block content %}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
@@ -14,13 +14,41 @@
                 {% if fund.label %}<span class="text-muted ms-2">{{ fund.label }}</span>{% endif %}
             </div>
         </div>
-        <div class="btn-group" role="group" aria-label="Geschäftsjahr auswählen">
-            {% for available_year in years %}
-                <a class="btn {% if available_year == year %}btn-primary{% else %}btn-outline-primary{% endif %}"
-                   href="{% url 'sap_integration:fund_detail' available_year fund.id %}">{{ available_year }}</a>
-            {% endfor %}
+        <div class="d-flex flex-wrap gap-2">
+            {% if is_clean %}
+                <a class="btn btn-outline-primary"
+                   href="{% url 'sap_integration:fund_detail' year fund.id %}">Original anzeigen</a>
+            {% else %}
+                <a class="btn btn-outline-primary"
+                   href="{% url 'sap_integration:fund_detail' year fund.id %}?clean=1">Bereinigen</a>
+            {% endif %}
+            <div class="dropdown">
+                <button class="btn btn-primary dropdown-toggle" type="button"
+                        id="statement-year-dropdown" data-bs-toggle="dropdown"
+                        aria-expanded="false">
+                    Geschäftsjahr {{ year|unlocalize }}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="statement-year-dropdown">
+                    {% for available_year in years %}
+                        <li>
+                            <a class="dropdown-item{% if available_year == year %} active{% endif %}"
+                               {% if available_year == year %}aria-current="page"{% endif %}
+                               href="{% url 'sap_integration:fund_detail' available_year fund.id %}{% if is_clean %}?clean=1{% endif %}">{{ available_year|unlocalize }}</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     </div>
+
+    {% if is_clean %}
+        <div class="alert alert-info py-2" role="status">
+            Bereinigte Ansicht: Gegenbuchungen wurden entfernt und gleiche Positionen zusammengefasst.
+            {% if fund.treat_negative_actuals_as_funding %}
+                Verbleibende negative Ist-Buchungen werden als Mittelzuflüsse nicht in die Ausgaben eingerechnet.
+            {% endif %}
+        </div>
+    {% endif %}
 
     <div class="row g-3 mb-4">
         <div class="col-sm-6 col-xl">
@@ -35,6 +63,11 @@
             <div class="card h-100"><div class="card-body">
                 <div class="text-muted small">Bezahlt</div>
                 <div class="fs-5 fw-semibold">{{ values.actual_total|floatformat:"2g" }} €</div>
+                {% if is_clean and values.funding_total %}
+                    <div class="small text-success">
+                        {{ values.funding_total|floatformat:"2g" }} € Mittelzuflüsse nicht eingerechnet
+                    </div>
+                {% endif %}
             </div></div>
         </div>
         <div class="col-sm-6 col-xl">
@@ -71,9 +104,14 @@
             </thead>
             <tbody>
                 {% for transaction in values.transactions %}
-                    <tr{% if transaction.type == "commitment" %} class="table-secondary"{% endif %}>
+                    <tr{% if transaction.is_funding %} class="table-success"{% elif transaction.type == "commitment" %} class="table-secondary"{% endif %}>
                         <td>{{ transaction.business_partner|default:"" }}</td>
-                        <td>{{ transaction.position }}</td>
+                        <td>
+                            {{ transaction.position }}
+                            {% if transaction.is_funding %}
+                                <span class="badge text-bg-success ms-1">Mittelzufluss</span>
+                            {% endif %}
+                        </td>
                         <td class="text-end">
                             {% if transaction.type == "actual" %}{{ transaction.amount|floatformat:"2g" }} €{% endif %}
                         </td>
@@ -86,6 +124,13 @@
                 {% endfor %}
             </tbody>
             <tfoot class="fw-bold">
+                {% if is_clean and values.funding_total %}
+                    <tr class="table-success">
+                        <td colspan="2">Mittelzuflüsse (nicht eingerechnet)</td>
+                        <td class="text-end">{{ values.funding_total|floatformat:"2g" }} €</td>
+                        <td></td>
+                    </tr>
+                {% endif %}
                 <tr>
                     <td colspan="2">Summe</td>
                     <td class="text-end">{{ values.actual_total|floatformat:"2g" }} €</td>

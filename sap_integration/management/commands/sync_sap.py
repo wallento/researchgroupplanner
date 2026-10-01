@@ -40,7 +40,9 @@ class Command(BaseCommand):
         try:
             result = run_sync(config, year)
         except Exception as error:
-            raise CommandError(f"SAP-Download fehlgeschlagen: {error}") from error
+            raise CommandError(
+                f"SAP-Download fehlgeschlagen ({type(error).__name__}): {error}"
+            ) from error
 
         try:
             parsed_path = parse_downloaded_reports(
@@ -50,7 +52,8 @@ class Command(BaseCommand):
             )
         except Exception as error:
             raise CommandError(
-                f"SAP-Download wurde gespeichert, aber das Parsing ist fehlgeschlagen: {error}"
+                "SAP-Download wurde gespeichert, aber das Parsing ist "
+                f"fehlgeschlagen ({type(error).__name__}): {error}"
             ) from error
 
         self.stdout.write(

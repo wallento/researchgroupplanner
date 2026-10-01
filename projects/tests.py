@@ -67,14 +67,27 @@ class SAPFundModelTests(TestCase):
 
         self.assertEqual(str(fund), "P-100 – Personalmittel")
 
+    def test_negative_actuals_are_not_funding_by_default(self):
+        fund = SAPFund.objects.create(fund_number="P-200", project=self.project)
+
+        self.assertFalse(fund.treat_negative_actuals_as_funding)
+
 
 class SAPFundAdminTests(TestCase):
     def test_project_admin_contains_fund_inline(self):
         project_admin = admin.site._registry[Project]
 
         self.assertIn(ProjectSAPFundInlineAdmin, project_admin.inlines)
+        self.assertIn(
+            "treat_negative_actuals_as_funding",
+            ProjectSAPFundInlineAdmin.fields,
+        )
 
     def test_annual_pool_admin_contains_fund_inline(self):
         annual_pool_admin = admin.site._registry[AnnualPool]
 
         self.assertIn(AnnualPoolSAPFundInlineAdmin, annual_pool_admin.inlines)
+        self.assertIn(
+            "treat_negative_actuals_as_funding",
+            AnnualPoolSAPFundInlineAdmin.fields,
+        )
