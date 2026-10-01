@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from projects.models import EmploymentCategories
 
-from .utils import get_salaries_by_month
+from .utils import get_salaries_by_month, get_sap_actuals_by_month
 
 def index(request):
     today = timezone.now().date()
@@ -66,5 +66,11 @@ def details(request: HttpRequest, staff_id: int):
     for employment in employments:
         employment.salaries_by_month = get_salaries_by_month(employment)
         employment.allocations = employment.stafffundingallocation_set.all().order_by("start_date")
+        sap_actuals = get_sap_actuals_by_month(employment.allocations)
+        employment.has_sap_actuals = bool(sap_actuals)
+        employment.salary_rows = [
+            (month, salary, sap_actuals.get(month, []))
+            for month, salary in employment.salaries_by_month.items()
+        ]
 
     return render(request, "staffing/details.html", {"staff_member": staff_member, "employments": employments})

@@ -8,6 +8,10 @@ from projects.models import OtherBudgetItem, SAPFund, StaffBudgetItem
 from staffing.models import StaffMember
 
 
+# FMM-Werttyp of manual transfer postings between funds.
+TRANSFER_VALUE_TYPE = "66"
+
+
 class SAPPositionKind(models.TextChoices):
     STAFF = "staff", "Personal"
     TRAVEL = "travel", "Reise"
@@ -84,6 +88,17 @@ class SAPPosition(models.Model):
     @property
     def total(self):
         return self.actual + self.commitment
+
+    @property
+    def is_transfer(self):
+        """Staff cost transfer between funds (Umbuchung), not a contract of its own."""
+        return (
+            self.kind == SAPPositionKind.STAFF
+            and not self.person_name
+            and not self.contract_periods
+            and bool(self.bookings)
+            and all(booking["value_type"] == TRANSFER_VALUE_TYPE for booking in self.bookings)
+        )
 
 
 class SAPCostTypeMapping(models.Model):

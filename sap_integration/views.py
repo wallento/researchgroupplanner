@@ -281,7 +281,7 @@ FILTERS = {
     "ok": ("Übereinstimmend", {Status.OK}),
     "neutral": ("Ohne Betrag", {Status.NEUTRAL}),
     "ignored": ("Ignoriert", {Status.IGNORED}),
-    "income": ("Einnahmen", {Status.INFO}),
+    "income": ("Information", {Status.INFO}),
     "all": ("Alle", set(STATUS_LABELS)),
 }
 
@@ -481,6 +481,10 @@ def _handle_position_action(request, fund, check):
         SAPIgnoredPosition.objects.filter(fund=fund, reference=position.reference).delete()
         messages.success(request, f"Position {position.reference} wird wieder abgeglichen.")
         return redirect(next_url)
+
+    if position.is_transfer:
+        messages.error(request, "Umbuchungen werden nicht in die Planung übernommen.")
+        return redirect(detail_url)
 
     if position.kind == SAPPositionKind.STAFF:
         if action == "transform_staff":

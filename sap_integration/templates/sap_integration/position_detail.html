@@ -53,7 +53,7 @@
         </div>
     {% endif %}
 
-    {% if position.kind == 'staff' %}
+    {% if position.kind == 'staff' and not position.is_transfer %}
         {% if check.allocations %}
             <h3 class="h5">Planung</h3>
             <ul class="list-group mb-3">
@@ -131,7 +131,7 @@
                 <div><button class="btn btn-outline-primary">Verknüpfen</button></div>
             </form>
         {% endif %}
-    {% elif position.kind != 'income' %}
+    {% elif position.kind != 'income' and not position.is_transfer %}
         {% if check.transactions %}
             <h3 class="h5">Planung</h3>
             <ul class="list-group mb-3">

@@ -128,7 +128,10 @@ def build_reconciliation(fund):
     checks = []
     for position in positions:
         check = PositionCheck(position=position, ignored=ignored.get(position.reference))
-        if position.kind == SAPPositionKind.STAFF:
+        if position.is_transfer:
+            check.status = Status.INFO
+            check.notes.append("Umbuchung zwischen Fonds – keine eigene Planung, nicht als Gehalt übernehmen.")
+        elif position.kind == SAPPositionKind.STAFF:
             _check_staff(check, allocations, staff_members, staff_budget_items, mappings)
         elif position.kind == SAPPositionKind.INCOME:
             check.status = Status.INFO

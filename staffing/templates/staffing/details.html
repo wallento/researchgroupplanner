@@ -15,11 +15,27 @@
         <tr>
             <td>Monat</td>
             <td>Gehalt</td>
+            {% if employment.has_sap_actuals %}<td>Ist (SAP)</td>{% endif %}
         </tr>
-            {% for month, salary in employment.salaries_by_month.items %}
+            {% for month, salary, actuals in employment.salary_rows %}
             <tr>
                 <td>{{ month }}</td>
-                <td>€&nbsp;{{ salary }}</td>
+                <td>
+                    €&nbsp;{{ salary }}
+                    {% if actuals %}<span class="badge text-bg-success ms-1" title="Monat ist in SAP als Ist gebucht">SAP-Ist</span>{% endif %}
+                </td>
+                {% if employment.has_sap_actuals %}
+                <td>
+                    {% for actual in actuals %}
+                        <div>
+                            €&nbsp;{{ actual.amount }}
+                            ({% if actual.project %}<a href="{% url 'projects:details' actual.project.acronym %}">{{ actual.label }}</a>{% else %}{{ actual.label }}{% endif %})
+                        </div>
+                    {% empty %}
+                        <span class="text-muted">–</span>
+                    {% endfor %}
+                </td>
+                {% endif %}
             </tr>
             {% endfor %}
       </table>
