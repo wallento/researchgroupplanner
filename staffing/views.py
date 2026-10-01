@@ -8,7 +8,12 @@ from django.utils import timezone
 
 from projects.models import EmploymentCategories
 
-from .utils import get_salaries_by_month, get_sap_actuals_by_month
+from .utils import (
+    get_salaries_by_month,
+    get_sap_actuals_by_month,
+    get_sap_correction_links,
+    get_sap_salary_mismatches,
+)
 
 def index(request):
     today = timezone.now().date()
@@ -72,8 +77,11 @@ def details(request: HttpRequest, staff_id: int):
             allocation_timeline.append(_timeline_entry(allocation))
         sap_actuals = get_sap_actuals_by_month(employment.allocations)
         employment.has_sap_actuals = bool(sap_actuals)
+        employment.sap_mismatches = get_sap_salary_mismatches(employment.salaries_by_month, sap_actuals)
+        employment.sap_correction_links = get_sap_correction_links(sap_actuals, employment.sap_mismatches)
+        mismatch_months = {mismatch["month"] for mismatch in employment.sap_mismatches}
         employment.salary_rows = [
-            (month, salary, sap_actuals.get(month, []))
+            (month, salary, sap_actuals.get(month, []), month in mismatch_months)
             for month, salary in employment.salaries_by_month.items()
         ]
 

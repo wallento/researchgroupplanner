@@ -5,7 +5,12 @@ from dateutil.relativedelta import relativedelta
 
 from projects.models import AnnualPool, Landesstelle, OverheadBudgetItemShare, Project, SAPFund, StaffBudgetItem
 from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
-from staffing.utils import get_salaries_by_month
+from staffing.utils import (
+    get_salaries_by_month,
+    get_sap_actuals_by_month,
+    get_sap_correction_links,
+    get_sap_salary_mismatches,
+)
 from django.conf import settings
 from django.contrib import messages
 from django.utils import timezone
@@ -541,6 +546,7 @@ def warnings(request):
 
     if settings.SAP_GM_IMPORT_ENABLED:
         warnings_list.extend(_sap_reconciliation_warnings())
+        warnings_list.extend(_sap_actual_salary_warnings())
 
     if settings.SAP_ENABLED:
         try:
@@ -614,6 +620,35 @@ def warnings(request):
     return render(request, "controlling/warnings.html", {
         "warnings_list": warnings_list,
     })
+
+
+def _sap_actual_salary_warnings():
+    """Planned salaries that differ from SAP actual payroll of the imported project exports."""
+    result_warnings = []
+    employments = Employment.objects.select_related("staff_member").prefetch_related(
+        "employmentsalaries_set", "stafffundingallocation_set"
+    )
+    for employment in employments:
+        allocations = list(employment.stafffundingallocation_set.all())
+        if not any(allocation.sap_reference for allocation in allocations):
+            continue
+        sap_actuals = get_sap_actuals_by_month(allocations)
+        mismatches = get_sap_salary_mismatches(get_salaries_by_month(employment), sap_actuals)
+        if not mismatches:
+            continue
+        result_warnings.append({
+            "severity": "warning",
+            "title": f"Gehalt weicht vom SAP-Ist ab: {employment.staff_member}",
+            "details": [
+                f"{mismatch['month']}: SAP {_decimal_2(mismatch['sap'])} EUR, "
+                f"Planung {_decimal_2(mismatch['planned'])} EUR "
+                f"(Differenz {_decimal_2(mismatch['difference'])} EUR)"
+                for mismatch in mismatches
+            ],
+            "link": f"/staffing/details/{employment.staff_member.id}/",
+            "correction_links": get_sap_correction_links(sap_actuals, mismatches),
+        })
+    return result_warnings
 
 
 def _sap_reconciliation_warnings():

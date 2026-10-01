@@ -11,6 +11,7 @@ from projects.models import OtherBudgetItemTransaction
 from sap_integration.crosscheck import add_reference, contract_periods, references
 from sap_integration.models import SAPPersonMapping
 from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
+from staffing.utils import get_sap_actuals_by_month
 
 
 def remember_person(sap_name, staff_member):
@@ -132,6 +133,14 @@ def apply_monthly_salaries(allocation, monthly_costs):
     # SAP books one amount per month for the whole position, which can be
     # split over several allocations (e.g. a contract extension mid-month).
     linked = _linked_allocations(allocation)
+    # A month paid from several funds (e.g. a switch mid-month) is only
+    # complete when all of them are combined; SAP does not split it by days.
+    sap_linked = [a for a in employment.stafffundingallocation_set.all() if references(a.sap_reference)]
+    multi_fund_months = {
+        month: sum((entry["amount"] for entry in entries), Decimal("0.00"))
+        for month, entries in get_sap_actuals_by_month(sap_linked).items()
+        if len(entries) > 1
+    }
 
     salaries = _salaries_by_month(employment)
     skipped = []
@@ -142,9 +151,12 @@ def apply_monthly_salaries(allocation, monthly_costs):
         if not (allocation.start_date.replace(day=1) <= month_start <= allocation_end.replace(day=1)):
             skipped.append(month)
             continue
+        share_allocations = linked
+        if month in multi_fund_months:
+            cost, share_allocations = multi_fund_months[month], sap_linked
         # calculate_salary_for_allocation prorates by covered days and
         # percentage; SAP's amount already reflects both, so undo them.
-        share = _month_share(linked, month_start)
+        share = _month_share(share_allocations, month_start)
         if not share:
             skipped.append(month)
             continue

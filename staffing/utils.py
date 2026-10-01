@@ -59,8 +59,9 @@ def get_salaries_by_month(employment: Employment):
 def get_sap_actuals_by_month(allocations):
     """SAP payroll actuals per month for the positions referenced by the allocations.
 
-    Returns {"YYYY-MM": [{"project", "label", "amount"}]} summed per fund,
-    using only the latest import of each fund.
+    Returns {"YYYY-MM": [{"project", "label", "amount", "positions"}]} summed
+    per fund, using only the latest import of each fund. "positions" holds
+    (fund_id, position_id, reference) of the contributing SAP positions.
     """
     from sap_integration.crosscheck import references
     from sap_integration.models import SAPPosition
@@ -93,9 +94,47 @@ def get_sap_actuals_by_month(allocations):
                 "project": fund.project,
                 "label": _fund_label(fund),
                 "amount": Decimal("0.00"),
+                "positions": set(),
             })
             entry["amount"] += Decimal(amount)
+            entry["positions"].add((fund.id, position.id, position.reference))
     return {month: list(by_fund.values()) for month, by_fund in actuals.items()}
+
+
+SAP_SALARY_TOLERANCE = Decimal("1.00")
+
+
+def get_sap_salary_mismatches(salaries_by_month, sap_actuals):
+    """Months where the planned salary differs from SAP's actual payroll (all funds combined)."""
+    mismatches = []
+    for month, entries in sorted(sap_actuals.items()):
+        sap_total = sum((entry["amount"] for entry in entries), Decimal("0.00"))
+        planned = salaries_by_month.get(month, Decimal("0.00"))
+        if abs(sap_total - planned) > SAP_SALARY_TOLERANCE:
+            mismatches.append({
+                "month": month,
+                "planned": planned,
+                "sap": sap_total,
+                "difference": sap_total - planned,
+            })
+    return mismatches
+
+
+def get_sap_correction_links(sap_actuals, mismatches):
+    """Reconciliation pages of the SAP positions booked in the mismatching months."""
+    from django.urls import reverse
+
+    links = {}
+    for mismatch in mismatches:
+        for entry in sap_actuals.get(mismatch["month"], []):
+            if entry["project"] is None:
+                continue
+            for fund_id, position_id, reference in entry["positions"]:
+                links.setdefault((fund_id, position_id), {
+                    "label": f"{entry['label']} – SAP-Position {reference}",
+                    "url": reverse("sap_integration:position_detail", args=[fund_id, position_id]),
+                })
+    return sorted(links.values(), key=lambda link: link["label"])
 
 
 def _fund_label(fund):

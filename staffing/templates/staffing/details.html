@@ -200,18 +200,30 @@
       {% endif %}
 
       <h4>Gehälter</h4>
+      {% if employment.sap_mismatches %}
+        <div class="alert alert-warning">
+          In {{ employment.sap_mismatches|length }} Monat(en) weicht das geplante Gehalt vom SAP-Ist ab:
+          {% for mismatch in employment.sap_mismatches %}{{ mismatch.month }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+          Die Werte lassen sich im SAP-Abgleich über „Gehälter übernehmen“ aktualisieren:
+          <ul class="mb-0 mt-1">
+            {% for link in employment.sap_correction_links %}
+              <li><a href="{{ link.url }}">{{ link.label }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
       <table class="table table-bordered">
         <tr>
             <td>Monat</td>
             <td>Gehalt</td>
             {% if employment.has_sap_actuals %}<td>Ist (SAP)</td>{% endif %}
         </tr>
-            {% for month, salary, actuals in employment.salary_rows %}
-            <tr>
+            {% for month, salary, actuals, mismatch in employment.salary_rows %}
+            <tr{% if mismatch %} class="table-warning"{% endif %}>
                 <td>{{ month }}</td>
                 <td>
                     €&nbsp;{{ salary }}
-                    {% if actuals %}<span class="badge text-bg-success ms-1" title="Monat ist in SAP als Ist gebucht">SAP-Ist</span>{% endif %}
+                    {% if mismatch %}<span class="badge text-bg-warning ms-1" title="Geplantes Gehalt weicht vom SAP-Ist ab">Abweichung</span>{% elif actuals %}<span class="badge text-bg-success ms-1" title="Monat ist in SAP als Ist gebucht">SAP-Ist</span>{% endif %}
                 </td>
                 {% if employment.has_sap_actuals %}
                 <td>
