@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from django.db import transaction
 
 from projects.models import OtherBudgetItemTransaction
-from sap_integration.crosscheck import add_reference, contract_periods
+from sap_integration.crosscheck import add_reference, contract_periods, references
 from sap_integration.models import SAPPersonMapping
 from staffing.models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
 
@@ -127,9 +127,11 @@ def apply_monthly_salaries(allocation, monthly_costs):
     """
     employment = allocation.employment
     allocation_end = allocation.end_date or employment.end_date
-    if not allocation.percentage:
+    if not allocation.percentage or not employment.percentage:
         return sorted(monthly_costs)
-    factor = Decimal(employment.percentage) / Decimal(allocation.percentage)
+    # SAP books one amount per month for the whole position, which can be
+    # split over several allocations (e.g. a contract extension mid-month).
+    linked = _linked_allocations(allocation)
 
     salaries = _salaries_by_month(employment)
     skipped = []
@@ -140,12 +142,13 @@ def apply_monthly_salaries(allocation, monthly_costs):
         if not (allocation.start_date.replace(day=1) <= month_start <= allocation_end.replace(day=1)):
             skipped.append(month)
             continue
-        salary = cost * factor
-        # calculate_salary_for_allocation prorates the first month; SAP already did.
-        if month_start == allocation.start_date.replace(day=1) and allocation.start_date.day != 1:
-            days = monthrange(month_start.year, month_start.month)[1]
-            salary = salary * days / (days - allocation.start_date.day + 1)
-        salaries[month] = salary.quantize(Decimal("0.01"))
+        # calculate_salary_for_allocation prorates by covered days and
+        # percentage; SAP's amount already reflects both, so undo them.
+        share = _month_share(linked, month_start)
+        if not share:
+            skipped.append(month)
+            continue
+        salaries[month] = (cost / share).quantize(Decimal("0.01"))
 
     _replace_salaries(employment, salaries)
     return sorted(skipped)
@@ -179,6 +182,44 @@ def _transaction_description(position):
     if position.description and position.description not in position.title:
         parts.append(position.description)
     return " – ".join(part for part in parts if part)
+
+
+def _linked_allocations(allocation):
+    """Allocations of the same employment and funding owner sharing an SAP reference."""
+    refs = references(allocation.sap_reference)
+    linked = [
+        other for other in allocation.employment.stafffundingallocation_set.select_related("budget_item")
+        if other.id != allocation.id
+        and references(other.sap_reference) & refs
+        and _owner(other) == _owner(allocation)
+    ]
+    return [allocation, *linked]
+
+
+def _owner(allocation):
+    if allocation.budget_item_id:
+        return "project", allocation.budget_item.project_id
+    if allocation.annual_pool_budget_id:
+        return "annual_pool", allocation.annual_pool_budget_id
+    if allocation.landesstelle_id:
+        return "landesstelle", allocation.landesstelle_id
+    return "universal", None
+
+
+def _month_share(allocations, month_start):
+    """Fraction of a full monthly salary that the allocations plan as cost."""
+    days = monthrange(month_start.year, month_start.month)[1]
+    month_end = month_start.replace(day=days)
+    share = Decimal("0")
+    for allocation in allocations:
+        employment = allocation.employment
+        start = max(allocation.start_date, employment.start_date, month_start)
+        end = min(allocation.end_date or employment.end_date, employment.end_date, month_end)
+        if end < start:
+            continue
+        covered = Decimal((end - start).days + 1) / Decimal(days)
+        share += covered * Decimal(allocation.percentage) / Decimal(employment.percentage)
+    return share
 
 
 def _salaries_by_month(employment):
