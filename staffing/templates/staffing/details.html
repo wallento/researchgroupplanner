@@ -1,44 +1,169 @@
 {% extends "controlling/base.html" %}
 
-{% load django_bootstrap5 %}
+{% load django_bootstrap5 static %}
 
 {% block title %}{{ staff_member }}{% endblock %}
 {% block heading %}{{ staff_member }}{% endblock %}
 
 {% block content %}
+  <h2>Finanzierung im Zeitverlauf</h2>
+
+  {{ allocation_timeline|json_script:"allocation-timeline-data" }}
+  <link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
+  <script src="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.js' %}"></script>
+  <style>
+      .timeline-scroll {
+          border: 1px solid #d6d6d6;
+          border-radius: 8px;
+          background: #fff;
+          margin-bottom: 1.5rem;
+      }
+
+      #allocation_timeline .vis-timeline {
+          border: 0;
+      }
+
+      #allocation_timeline .vis-item {
+          background-color: #004990;
+          border-color: #003a73;
+          border-radius: 5px;
+          font-size: 0.85rem;
+      }
+
+      #allocation_timeline .vis-item.has-link {
+          cursor: pointer;
+      }
+
+      #allocation_timeline .vis-item .vis-item-content {
+          color: #ffffff;
+      }
+
+      #allocation_timeline .vis-label {
+          font-size: 0.85rem;
+          font-weight: 600;
+      }
+
+      #allocation_timeline .vis-label a {
+          color: inherit;
+          text-decoration: none;
+      }
+
+      #allocation_timeline .vis-label a:hover {
+          text-decoration: underline;
+      }
+
+      #allocation_timeline .vis-time-axis .vis-text {
+          font-size: 0.75rem;
+      }
+  </style>
+  <script>
+      document.addEventListener('DOMContentLoaded', function () {
+          var container = document.getElementById('allocation_timeline');
+          var entries = JSON.parse(document.getElementById('allocation-timeline-data').textContent);
+          if (!entries.length) {
+              container.innerHTML = '<p class="m-3 text-muted">Keine Finanzierungszuordnungen hinterlegt.</p>';
+              return;
+          }
+          if (!window.vis || !vis.Timeline) {
+              container.innerHTML = '<p class="m-3 text-danger">Timeline-Library konnte nicht geladen werden.</p>';
+              return;
+          }
+
+          function parseDate(value) {
+              var parts = value.split('-');
+              return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+          }
+
+          function escapeHtml(value) {
+              var node = document.createElement('div');
+              node.textContent = value;
+              return node.innerHTML;
+          }
+
+          var groups = [];
+          var seenGroups = {};
+          var links = {};
+          var items = entries.map(function (entry) {
+              if (!seenGroups[entry.group]) {
+                  seenGroups[entry.group] = true;
+                  var label = escapeHtml(entry.label);
+                  groups.push({
+                      id: entry.group,
+                      content: entry.link ? '<a href="' + entry.link + '">' + label + '</a>' : label,
+                  });
+              }
+              var start = parseDate(entry.start);
+              var end = parseDate(entry.end);
+              end.setDate(end.getDate() + 1);
+              var itemId = 'allocation_' + entry.id;
+              if (entry.link) {
+                  links[itemId] = entry.link;
+              }
+              return {
+                  id: itemId,
+                  group: entry.group,
+                  content: entry.percentage + '\u00a0%',
+                  title: escapeHtml(entry.title),
+                  start: start,
+                  end: end,
+                  className: entry.link ? 'has-link' : '',
+              };
+          });
+
+          var min = items.reduce(function (acc, item) { return item.start < acc ? item.start : acc; }, items[0].start);
+          var max = items.reduce(function (acc, item) { return item.end > acc ? item.end : acc; }, items[0].end);
+          var paddedMin = new Date(min.getFullYear(), min.getMonth() - 2, 1);
+          var paddedMax = new Date(max.getFullYear(), max.getMonth() + 3, 0);
+
+          if (vis.moment && !window.__gpSingleLetterMonthsConfigured) {
+              vis.moment.updateLocale('de', {
+                  monthsShort: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
+              });
+              window.__gpSingleLetterMonthsConfigured = true;
+          }
+
+          var timeline = new vis.Timeline(container, items, groups, {
+              stack: false,
+              min: paddedMin,
+              max: paddedMax,
+              start: paddedMin,
+              end: paddedMax,
+              zoomable: true,
+              moveable: true,
+              horizontalScroll: true,
+              verticalScroll: false,
+              showCurrentTime: true,
+              zoomKey: 'ctrlKey',
+              margin: { item: { horizontal: 4, vertical: 6 }, axis: 6 },
+              orientation: { axis: 'bottom' },
+              locale: 'de',
+              timeAxis: { scale: 'month', step: 1 },
+              format: {
+                  minorLabels: { month: 'MMM' },
+                  majorLabels: { month: 'YYYY' },
+              },
+              tooltip: { followMouse: false, overflowMethod: 'flip' },
+          });
+
+          timeline.on('select', function (properties) {
+              if (!properties.items || !properties.items.length) {
+                  return;
+              }
+              var target = links[properties.items[0]];
+              if (target) {
+                  window.location.href = target;
+              }
+          });
+      });
+  </script>
+  <div class="timeline-scroll">
+      <div id="allocation_timeline"></div>
+  </div>
+
   <h2>Anstellungen & Gehälter</h2>
 
     {% for employment in employments %}
       <h3>{{ employment.get_category }} ({{ employment.start_date }} - {{ employment.end_date }}, {{ employment.percentage }}%)</h3>
-
-      <table class="table table-bordered">
-        <tr>
-            <td>Monat</td>
-            <td>Gehalt</td>
-            {% if employment.has_sap_actuals %}<td>Ist (SAP)</td>{% endif %}
-        </tr>
-            {% for month, salary, actuals in employment.salary_rows %}
-            <tr>
-                <td>{{ month }}</td>
-                <td>
-                    €&nbsp;{{ salary }}
-                    {% if actuals %}<span class="badge text-bg-success ms-1" title="Monat ist in SAP als Ist gebucht">SAP-Ist</span>{% endif %}
-                </td>
-                {% if employment.has_sap_actuals %}
-                <td>
-                    {% for actual in actuals %}
-                        <div>
-                            €&nbsp;{{ actual.amount }}
-                            ({% if actual.project %}<a href="{% url 'projects:details' actual.project.acronym %}">{{ actual.label }}</a>{% else %}{{ actual.label }}{% endif %})
-                        </div>
-                    {% empty %}
-                        <span class="text-muted">–</span>
-                    {% endfor %}
-                </td>
-                {% endif %}
-            </tr>
-            {% endfor %}
-      </table>
 
       <h4>Finanzierungszuordnungen</h4>
       {% if employment.allocations %}
@@ -73,6 +198,36 @@
       {% else %}
         <p class="text-muted">Keine Finanzierungszuordnungen hinterlegt.</p>
       {% endif %}
+
+      <h4>Gehälter</h4>
+      <table class="table table-bordered">
+        <tr>
+            <td>Monat</td>
+            <td>Gehalt</td>
+            {% if employment.has_sap_actuals %}<td>Ist (SAP)</td>{% endif %}
+        </tr>
+            {% for month, salary, actuals in employment.salary_rows %}
+            <tr>
+                <td>{{ month }}</td>
+                <td>
+                    €&nbsp;{{ salary }}
+                    {% if actuals %}<span class="badge text-bg-success ms-1" title="Monat ist in SAP als Ist gebucht">SAP-Ist</span>{% endif %}
+                </td>
+                {% if employment.has_sap_actuals %}
+                <td>
+                    {% for actual in actuals %}
+                        <div>
+                            €&nbsp;{{ actual.amount }}
+                            ({% if actual.project %}<a href="{% url 'projects:details' actual.project.acronym %}">{{ actual.label }}</a>{% else %}{{ actual.label }}{% endif %})
+                        </div>
+                    {% empty %}
+                        <span class="text-muted">–</span>
+                    {% endfor %}
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+      </table>
     {% endfor %}
   </ul>
 {% endblock %}

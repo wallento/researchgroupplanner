@@ -1,6 +1,7 @@
 from controlling.utils import render
 
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from staffing.models import StaffMember
 from django.http import HttpRequest
 from django.utils import timezone
@@ -63,9 +64,12 @@ def details(request: HttpRequest, staff_id: int):
         "stafffundingallocation_set__landesstelle",
         "stafffundingallocation_set__annual_pool_budget__annual_pool",
     ).all()
+    allocation_timeline = []
     for employment in employments:
         employment.salaries_by_month = get_salaries_by_month(employment)
         employment.allocations = employment.stafffundingallocation_set.all().order_by("start_date")
+        for allocation in employment.allocations:
+            allocation_timeline.append(_timeline_entry(allocation))
         sap_actuals = get_sap_actuals_by_month(employment.allocations)
         employment.has_sap_actuals = bool(sap_actuals)
         employment.salary_rows = [
@@ -73,4 +77,39 @@ def details(request: HttpRequest, staff_id: int):
             for month, salary in employment.salaries_by_month.items()
         ]
 
-    return render(request, "staffing/details.html", {"staff_member": staff_member, "employments": employments})
+    return render(request, "staffing/details.html", {
+        "staff_member": staff_member,
+        "employments": employments,
+        "allocation_timeline": allocation_timeline,
+    })
+
+
+def _timeline_entry(allocation):
+    """One bar of the funding timeline, grouped by funding source."""
+    link = None
+    if allocation.budget_item_id:
+        project = allocation.budget_item.project
+        group, label = f"project-{project.id}", project.acronym
+        link = reverse("projects:details", args=[project.acronym])
+        title = f"{project.acronym} – {allocation.budget_item.title}"
+    elif allocation.annual_pool_budget_id:
+        pool = allocation.annual_pool_budget.annual_pool
+        group, label = f"pool-{pool.id}", f"Annual Pool {pool.title}"
+        title = f"{label} ({allocation.annual_pool_budget.year})"
+    elif allocation.is_universal:
+        group, label = "universal", "Universalprojekt"
+        title = label
+    else:
+        group, label = f"landesstelle-{allocation.landesstelle_id}", f"Landesstelle {allocation.landesstelle.title}"
+        title = label
+    end = allocation.end_date or allocation.employment.end_date
+    return {
+        "id": allocation.id,
+        "group": group,
+        "label": label,
+        "link": link,
+        "title": f"{title}: {allocation.percentage.normalize():f} % ({allocation.start_date:%d.%m.%Y} – {end:%d.%m.%Y})",
+        "percentage": float(allocation.percentage),
+        "start": allocation.start_date.isoformat(),
+        "end": end.isoformat(),
+    }

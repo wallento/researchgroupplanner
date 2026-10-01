@@ -119,6 +119,16 @@
 
     .vis-item {
         font-size: 0.85rem;
+        cursor: pointer;
+    }
+
+    .vis-labelset .vis-label a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .vis-labelset .vis-label a:hover {
+        text-decoration: underline;
     }
 
     .vis-label {
@@ -189,13 +199,15 @@
         var groups = [];
         var items = [];
         var existingGroups = {};
+        var links = {};
 
 {% for assignment in timeline_assignments %}
         var groupId = 'employee_{{ forloop.counter0 }}_{{ assignment.employee|slugify }}';
         if (!existingGroups['{{ assignment.employee|escapejs }}']) {
-            groups.push({ id: groupId, content: '{{ assignment.employee|escapejs }}' });
+            groups.push({ id: groupId, content: '<a href="{% url "staffing:details" assignment.employee.id %}">{{ assignment.employee|escapejs }}</a>' });
             existingGroups['{{ assignment.employee|escapejs }}'] = groupId;
         }
+        links['assignment_{{ forloop.counter0 }}'] = '{% url "staffing:details" assignment.employee.id %}';
 
         items.push({
             id: 'assignment_{{ forloop.counter0 }}',
@@ -225,7 +237,7 @@
             window.__gpSingleLetterMonthsConfigured = true;
         }
 
-        new vis.Timeline(container, items, groups, {
+        var timeline = new vis.Timeline(container, items, groups, {
             stack: false,
             min: windowRange.min,
             max: windowRange.max,
@@ -254,6 +266,16 @@
                 },
             },
             tooltip: { followMouse: false, overflowMethod: 'flip' },
+        });
+
+        timeline.on('select', function (properties) {
+            if (!properties.items || !properties.items.length) {
+                return;
+            }
+            var target = links[properties.items[0]];
+            if (target) {
+                window.location.href = target;
+            }
         });
     });
 </script>
