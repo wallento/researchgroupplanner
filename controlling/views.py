@@ -1,5 +1,6 @@
 from decimal import Decimal
 from datetime import date, timedelta
+from .models import IgnoredWarning
 from .utils import render
 from dateutil.relativedelta import relativedelta
 
@@ -617,9 +618,39 @@ def warnings(request):
     severity_order = {"danger": 0, "warning": 1, "info": 2, "success": 3}
     warnings_list.sort(key=lambda item: (severity_order.get(item["severity"], 99), item["title"]))
 
+    ignored = {entry.key: entry for entry in IgnoredWarning.objects.select_related("created_by")}
+    ignored_list = []
+    active_list = []
+    for warning in warnings_list:
+        warning["key"] = IgnoredWarning.key_for(warning)
+        warning["ignored"] = ignored.get(warning["key"])
+        (ignored_list if warning["ignored"] else active_list).append(warning)
+
     return render(request, "controlling/warnings.html", {
-        "warnings_list": warnings_list,
+        "warnings_list": active_list,
+        "ignored_list": ignored_list,
     })
+
+
+@login_required
+@require_POST
+def ignore_warning(request):
+    key = request.POST.get("key", "")
+    comment = request.POST.get("comment", "").strip()
+    if not comment:
+        messages.error(request, "Bitte eine Begründung angeben, warum die Warnung ignoriert wird.")
+    elif len(key) == 64:
+        IgnoredWarning.objects.update_or_create(key=key, defaults={"comment": comment, "created_by": request.user})
+        messages.success(request, "Warnung wird ignoriert.")
+    return redirect("warnings")
+
+
+@login_required
+@require_POST
+def unignore_warning(request):
+    IgnoredWarning.objects.filter(key=request.POST.get("key", "")).delete()
+    messages.success(request, "Warnung wird wieder angezeigt.")
+    return redirect("warnings")
 
 
 def _sap_actual_salary_warnings():

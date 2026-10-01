@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import NotificationLog
+from .models import IgnoredWarning, NotificationLog
 
 
 @admin.register(NotificationLog)
@@ -9,3 +9,10 @@ class NotificationLogAdmin(admin.ModelAdmin):
     search_fields = ('recipient_email', 'related_object_type')
     readonly_fields = ('sent_date',)
 
+
+
+@admin.register(IgnoredWarning)
+class IgnoredWarningAdmin(admin.ModelAdmin):
+    list_display = ('comment', 'created_by', 'created_at')
+    search_fields = ('comment',)
+    readonly_fields = ('key', 'created_at')

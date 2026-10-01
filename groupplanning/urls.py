@@ -25,9 +25,11 @@ from controlling.views import (
     apply_all_sap_salaries as controlling_apply_all_sap_salaries,
     apply_sap_salary as controlling_apply_sap_salary,
     create_manual_backup,
+    ignore_warning as controlling_ignore_warning,
     main as controlling_main,
     merge_salary_overlap as controlling_merge_salary_overlap,
     send_test_email,
+    unignore_warning as controlling_unignore_warning,
     statistics as controlling_statistics,
     warnings as controlling_warnings,
 )
@@ -44,6 +46,8 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", controlling_main, name="main"),
     path("warnings/", controlling_warnings, name="warnings"),
+    path("warnings/ignore/", controlling_ignore_warning, name="ignore_warning"),
+    path("warnings/unignore/", controlling_unignore_warning, name="unignore_warning"),
     path(
         "warnings/merge-salary-overlap/<int:current_id>/<int:following_id>/",
         controlling_merge_salary_overlap,
