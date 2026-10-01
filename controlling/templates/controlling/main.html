@@ -101,6 +101,21 @@
         color: #ffffff !important;
     }
 
+    #timeline_projects .vis-item,
+    #timeline_employees .vis-item,
+    #timeline_hiwis .vis-item {
+        cursor: pointer;
+    }
+
+    .vis-labelset .vis-label a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .vis-labelset .vis-label a:hover {
+        text-decoration: underline;
+    }
+
     .vis-labelset {
         width: 200px !important;
         flex: 0 0 200px !important;
@@ -270,9 +285,12 @@
         }
         var groups = [];
         var items = [];
+        var links = {};
 
 {% for project in projects %}
-        groups.push({ id: 'p{{ project.id }}', content: '{{ project.acronym|escapejs }}' });
+        var projectLink = '{% url "projects:details" project.acronym %}';
+        links['p{{ project.id }}'] = projectLink;
+        groups.push({ id: 'p{{ project.id }}', content: '<a href="' + projectLink + '">{{ project.acronym|escapejs }}</a>' });
 
         var regularStart = gpBuildDate({{ project.start_date|date:"Y" }}, {{ project.start_date|date:"n" }}, {{ project.start_date|date:"j" }});
         var regularEnd = gpBuildDate({{ project.end_date|date:"Y" }}, {{ project.end_date|date:"n" }}, {{ project.end_date|date:"j" }});
@@ -332,7 +350,7 @@
         container.style.minWidth = '100%';
         container.style.height = 'auto';
 
-        new vis.Timeline(container, items, groups, {
+        var timeline = new vis.Timeline(container, items, groups, {
             stack: false,
             min: windowRange.min,
             max: windowRange.max,
@@ -362,6 +380,17 @@
             },
             tooltip: { followMouse: false, overflowMethod: 'flip' },
         });
+
+        timeline.on('select', function (properties) {
+            if (!properties.items || !properties.items.length) {
+                return;
+            }
+            var item = timeline.itemsData.get(properties.items[0]);
+            var target = item && links[item.group];
+            if (target) {
+                window.location.href = target;
+            }
+        });
     }
 </script>
 <div id="timeline_projects_scroll" class="timeline-scroll">
@@ -386,7 +415,7 @@
 {% for row in staff_timeline_entries_employees %}
         var groupId = 's{{ row.staff_id }}';
         if (!existingGroups[groupId]) {
-            groups.push({ id: groupId, content: '{{ row.staff|escapejs }}' });
+            groups.push({ id: groupId, content: '<a href="{% url "staffing:details" row.staff_id %}">{{ row.staff|escapejs }}</a>' });
             existingGroups[groupId] = true;
         }
 
@@ -506,7 +535,7 @@
 {% for row in staff_timeline_entries_hiwis %}
         var groupId = 's{{ row.staff_id }}';
         if (!existingGroups[groupId]) {
-            groups.push({ id: groupId, content: '{{ row.staff|escapejs }}' });
+            groups.push({ id: groupId, content: '<a href="{% url "staffing:details" row.staff_id %}">{{ row.staff|escapejs }}</a>' });
             existingGroups[groupId] = true;
         }
 
