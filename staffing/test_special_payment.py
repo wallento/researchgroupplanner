@@ -127,3 +127,14 @@ class SpecialPaymentTests(TestCase):
         employment.refresh_from_db()
         self.assertIsNone(employment.salary_category)
         self.assertFalse(employment.employmentsalaries_set.exists())
+
+    def test_previous_employment_without_pay_grade_uses_current_classification(self):
+        self.employment(date(2025, 2, 15), date(2026, 10, 31), salary_category=None, start_level=None,
+                        level_start_date=None)
+        following = self.employment(date(2026, 11, 1), date(2027, 12, 31), start_level=2,
+                                    level_start_date=date(2025, 2, 1))
+
+        bonus = special_payment(following, 2026)
+
+        # Base: E13 Stufe 2 in July to September 2026 (5.106,09 €), full year paid.
+        self.assertEqual(bonus["gross"], (Decimal("5106.09") * Decimal("46.47") / 100).quantize(Decimal("0.01")))

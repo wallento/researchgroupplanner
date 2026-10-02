@@ -203,7 +203,11 @@ def special_payment(employment, year):
         month_end = _month_end(month_start.strftime("%Y-%m"))
         for part in chain:
             if part.start_date <= month_start and part.end_date >= month_end:
-                return part.tariff_gross_at(month_start)
+                # Earlier parts without pay grade use this employment's classification.
+                gross = part.tariff_gross_at(month_start)
+                if gross is None and part is not employment:
+                    gross = employment.tariff_gross_at(month_start)
+                return gross
         return None
 
     base_months = []
