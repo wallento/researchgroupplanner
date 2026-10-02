@@ -69,7 +69,9 @@
                             </form>
                             {% if not transaction.counts %}<span class="badge text-bg-secondary mt-1" title="Liegt außerhalb der Projektjahre und wird nicht mitgezählt">außerhalb Laufzeit</span>{% endif %}
                         </td>
-                        <td>{{ transaction.sap_id|default:"" }}</td>
+                        <td>
+                            {% for reference, url in transaction.sap_links %}{% if url %}<a href="{{ url }}" title="Beleg im SAP-Abgleich öffnen">{{ reference }}</a>{% else %}{{ reference }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </td>
                         <td class="text-end">€&nbsp;{{ transaction.amount }}</td>
                     </tr>
                 {% empty %}

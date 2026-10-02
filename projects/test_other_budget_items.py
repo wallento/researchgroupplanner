@@ -66,3 +66,19 @@ class OtherBudgetItemsPageTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_sap_reference_links_to_reconciliation(self):
+        from projects.models import SAPFund
+        from sap_integration.models import SAPImport, SAPPosition
+
+        fund = SAPFund.objects.create(fund_number="F-1", project=self.project)
+        sap_import = SAPImport.objects.create(fund=fund, file_name="export.xlsx")
+        position = SAPPosition.objects.create(sap_import=sap_import, reference="8000001", kind="travel", cost_type="7464")
+        self.conference.sap_id = "8000001, 9999999"
+        self.conference.save()
+
+        response = self.client.get(reverse("projects:other_budget_items", args=["TEST"]))
+
+        url = reverse("sap_integration:position_detail", args=[fund.id, position.id])
+        self.assertContains(response, f'<a href="{url}" title="Beleg im SAP-Abgleich öffnen">8000001</a>')
+        self.assertContains(response, ", 9999999")

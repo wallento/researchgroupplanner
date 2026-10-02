@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from .models import Landesstelle, OtherBudgetItemTransaction, StaffBudgetItem, Project
 from staffing.models import StaffFundingAllocation
+from sap_integration.crosscheck import references
 from staffing.utils import rebooking_cost_deltas, rebooking_person_month_deltas
 from django.http import HttpRequest
 from django.contrib import messages
@@ -173,9 +174,25 @@ def details(request: HttpRequest, acronym: str):
 
     return render(request, "projects/details.html", parameters)
 
+def _sap_position_urls(project):
+    """{SAP reference: reconciliation page} for the latest import of each of the project's funds."""
+    from sap_integration.models import SAPPosition
+
+    urls = {}
+    for fund in project.sap_funds.all():
+        sap_import = fund.sap_imports.order_by("-imported_at").first()
+        if sap_import is None:
+            continue
+        for position_id, reference in SAPPosition.objects.filter(sap_import=sap_import).values_list("id", "reference"):
+            urls.setdefault(reference, reverse("sap_integration:position_detail", args=[fund.id, position_id]))
+    return urls
+
+
 def other_budget_items(request: HttpRequest, acronym: str):
     project = get_object_or_404(Project, acronym=acronym)
     years = {int(year) for year in project.get_years()}
+
+    position_urls = _sap_position_urls(project)
 
     budget_items = list(project.otherbudgetitem_set.order_by("title"))
     for item in budget_items:
@@ -183,6 +200,9 @@ def other_budget_items(request: HttpRequest, acronym: str):
         for transaction in item.transactions:
             # Only bookings within the project years count, as on the details page.
             transaction.counts = transaction.date.year in years
+            transaction.sap_links = [
+                (reference, position_urls.get(reference)) for reference in sorted(references(transaction.sap_id))
+            ]
         item.used = sum((t.amount for t in item.transactions if t.counts), Decimal("0.00"))
         item.remain = item.amount - item.used
         item.usage_percent = budget_usage_percent(item.used, item.amount)
