@@ -141,3 +141,14 @@ class AllocationUiTests(TestCase):
         self.assertEqual(old["budget_totals"]["rebooked_projected"], old["budget_totals"]["projected"] - Decimal("6000.00"))
         self.assertEqual(new["budget_totals"]["rebooked_projected"], new["budget_totals"]["projected"] + Decimal("6000.00"))
         self.assertEqual(new["rebooked_allocated"], new["allocated_sum"] + Decimal("6000.00"))
+
+    def test_rebooking_person_month_deltas(self):
+        from staffing.utils import rebooking_person_month_deltas
+
+        self.rebook(percentage="50")
+
+        deltas = rebooking_person_month_deltas()
+
+        # July to December: 6 PM leave the old budget, 3 PM (at 50 %) arrive on the new one.
+        self.assertEqual(deltas[self.old_item.id], Decimal("-6"))
+        self.assertEqual(deltas[self.new_item.id], Decimal("3"))

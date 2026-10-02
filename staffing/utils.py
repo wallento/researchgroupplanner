@@ -321,3 +321,21 @@ def rebooking_cost_deltas(rebookings=None):
             deltas.get(target.budget_item_id, Decimal("0.00")) + calculate_salary_for_allocation(target).salary_sum
         )
     return {item_id: delta for item_id, delta in deltas.items() if delta}
+
+
+def rebooking_person_month_deltas(rebookings=None):
+    """{staff budget item id: person month change} if the open Umbuchungen were applied."""
+    from projects.utils import get_allocation_person_months
+
+    from .models import Rebooking
+
+    if rebookings is None:
+        rebookings = Rebooking.objects.select_related("allocation__employment")
+    deltas = {}
+    for rebooking in rebookings:
+        source, target = rebooking.as_allocations()
+        for allocation, sign in ((source, -1), (target, 1)):
+            if allocation.budget_item_id:
+                pm = sum(get_allocation_person_months(allocation).values(), Decimal("0"))
+                deltas[allocation.budget_item_id] = deltas.get(allocation.budget_item_id, Decimal("0")) + sign * pm
+    return deltas

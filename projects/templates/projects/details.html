@@ -58,10 +58,10 @@
             <tr>
                 <td>{{ budget.title }}</td>
                 <td>€&nbsp;{{ budget.amount }}</td>
-                {% for year, amount in budget.years.items %}
-                    <td>€&nbsp;{{ amount }}</td>
+                {% for amount, pm in budget.year_cells %}
+                    <td>€&nbsp;{{ amount }}<div class="small text-muted">{{ pm|floatformat:1 }}&nbsp;PM</div></td>
                 {% endfor %}
-                <td>€&nbsp;{{ budget.projected_sum }}{% if budget.rebooked_sum %}<div class="small text-muted text-nowrap">(Umbuchungen: €&nbsp;{{ budget.rebooked_sum }})</div>{% endif %}</td>
+                <td>€&nbsp;{{ budget.projected_sum }}<div class="small text-muted">{{ budget.pm_total|floatformat:1 }}&nbsp;PM</div>{% if budget.rebooked_sum %}<div class="small text-muted text-nowrap">(Umbuchungen: €&nbsp;{{ budget.rebooked_sum }} · {{ budget.rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
                 <td>€&nbsp;{{ budget.remain }}{% if budget.rebooked_sum %}<div class="small text-muted text-nowrap">(Umbuchungen: €&nbsp;{{ budget.rebooked_remain }})</div>{% endif %}</td>
             </tr>
         {% endfor %}
@@ -81,10 +81,10 @@
         <tr class="fw-bold">
             <th scope="row">Summe</th>
             <td>€&nbsp;{{ budget_totals.amount }}</td>
-            {% for amount in budget_totals.years %}
-                <td>€&nbsp;{{ amount }}</td>
+            {% for amount, pm in budget_totals.year_cells %}
+                <td>€&nbsp;{{ amount }}<div class="small text-muted fw-normal">{{ pm|floatformat:1 }}&nbsp;PM</div></td>
             {% endfor %}
-            <td>€&nbsp;{{ budget_totals.projected }}{% if budget_totals.rebooked_projected is not None %}<div class="small text-muted fw-normal text-nowrap">(Umbuchungen: €&nbsp;{{ budget_totals.rebooked_projected }})</div>{% endif %}</td>
+            <td>€&nbsp;{{ budget_totals.projected }}<div class="small text-muted fw-normal">{{ budget_totals.pm_total|floatformat:1 }}&nbsp;PM</div>{% if budget_totals.rebooked_projected is not None %}<div class="small text-muted fw-normal text-nowrap">(Umbuchungen: €&nbsp;{{ budget_totals.rebooked_projected }} · {{ budget_totals.rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
             <td>€&nbsp;{{ budget_totals.remain }}{% if budget_totals.rebooked_remain is not None %}<div class="small text-muted fw-normal text-nowrap">(Umbuchungen: €&nbsp;{{ budget_totals.rebooked_remain }})</div>{% endif %}</td>
         </tr>
     </tfoot>
@@ -310,12 +310,12 @@
     {% for staffing in budget.staff_allocations %}
         <tr>
             <td><a href="{% url 'staffing:details' staffing.allocation.employment.staff_member.id %}">{{ staffing.allocation.employment.staff_member }}</a><br/>({{ staffing.allocation.start_date }} - {{ staffing.allocation.end_date|default:staffing.allocation.employment.end_date }})</td>
-            <td style="text-align: right;">€&nbsp;{{ staffing.salary_sum }}</td>
+            <td style="text-align: right;">€&nbsp;{{ staffing.salary_sum }}<div class="small text-muted">{{ staffing.pm_total|floatformat:1 }}&nbsp;PM</div></td>
         </tr>
     {% endfor %}
         <tr>
             <td><strong>Summe:</strong></td>
-            <td style="text-align: right;">€&nbsp;{{ budget.projected_sum }}<br>(nicht allokiert: €&nbsp;{{ budget.remain }}){% if budget.rebooked_sum is not None and budget.rebooked_sum != "" %}<div class="small text-muted">(Umbuchungen: €&nbsp;{{ budget.rebooked_sum }}, nicht allokiert: €&nbsp;{{ budget.rebooked_remain }})</div>{% endif %}</td>
+            <td style="text-align: right;">€&nbsp;{{ budget.projected_sum }} · {{ budget.pm_total|floatformat:1 }}&nbsp;PM<br>(nicht allokiert: €&nbsp;{{ budget.remain }}){% if budget.rebooked_sum is not None and budget.rebooked_sum != "" %}<div class="small text-muted">(Umbuchungen: €&nbsp;{{ budget.rebooked_sum }} · {{ budget.rebooked_pm|floatformat:1 }}&nbsp;PM, nicht allokiert: €&nbsp;{{ budget.rebooked_remain }})</div>{% endif %}</td>
         </tr>
     </tbody>
 </table>

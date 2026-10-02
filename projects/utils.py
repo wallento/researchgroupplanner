@@ -42,6 +42,28 @@ def calculate_salary_for_allocation(allocation: StaffFundingAllocation):
 
     return SalaryAllocation(allocation, total_salary, months)
 
+def get_allocation_person_months(allocation: StaffFundingAllocation) -> dict[str, Decimal]:
+    """Person months (PM) per year: share of each month covered × allocation percentage / 100.
+
+    A full month at 100 % is 1 PM; the allocation is limited to its employment.
+    """
+    from calendar import monthrange
+
+    employment = allocation.employment
+    start = max(allocation.start_date, employment.start_date)
+    end = min(allocation.end_date or employment.end_date, employment.end_date)
+    factor = Decimal(allocation.percentage) / Decimal("100")
+    years = {}
+    current = start.replace(day=1)
+    while current <= end:
+        days = monthrange(current.year, current.month)[1]
+        covered = (min(end, current.replace(day=days)) - max(start, current)).days + 1
+        year = str(current.year)
+        years[year] = years.get(year, Decimal("0")) + Decimal(covered) / Decimal(days) * factor
+        current += relativedelta(months=1)
+    return years
+
+
 def get_allocations_salary_sum_of_year(year: int, allocation: SalaryAllocation) -> Decimal:
     return Decimal(sum(allocation.months.get(f"{year}-{month:02d}", 0) for month in range(1, 13))).quantize(Decimal('0.01'))
 

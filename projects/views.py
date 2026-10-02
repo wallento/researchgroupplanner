@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from .models import Landesstelle, OtherBudgetItemTransaction, StaffBudgetItem, Project
 from staffing.models import StaffFundingAllocation
-from staffing.utils import rebooking_cost_deltas
+from staffing.utils import rebooking_cost_deltas, rebooking_person_month_deltas
 from django.http import HttpRequest
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect
@@ -15,6 +15,7 @@ from django.views.decorators.http import require_POST
 from .utils import (
     budget_usage_percent,
     calculate_salary_for_allocation,
+    get_allocation_person_months,
     get_allocations_salary_sum_of_year,
     get_table_allocations,
     get_timeline_allocations,
@@ -44,24 +45,36 @@ def details(request: HttpRequest, acronym: str):
 
     staff_budget_items = StaffBudgetItem.objects.filter(project=project).all()
     rebooking_deltas = rebooking_cost_deltas()
+    rebooking_pm_deltas = rebooking_person_month_deltas()
 
     for budget_item in staff_budget_items:
         budget_item.staff_allocations = []
         budget_item.projected_sum = Decimal("0.00")
+        budget_item.pm_years = {}
         for allocation in StaffFundingAllocation.objects.filter(budget_item=budget_item).select_related("employment__staff_member"):
             salary_allocation = calculate_salary_for_allocation(allocation)
+            salary_allocation.person_months = get_allocation_person_months(allocation)
+            salary_allocation.pm_total = sum(salary_allocation.person_months.values(), Decimal("0"))
             budget_item.staff_allocations.append(salary_allocation)
             budget_item.projected_sum += salary_allocation.salary_sum
+            for year, pm in salary_allocation.person_months.items():
+                budget_item.pm_years[year] = budget_item.pm_years.get(year, Decimal("0")) + pm
         budget_item.years = {}
         for year in project.get_years():
             budget_item.years[year] = Decimal("0.00")
             for allocation in budget_item.staff_allocations:
                 budget_item.years[year] += get_allocations_salary_sum_of_year(year, allocation)
+        # PM outside the project years still count towards the total.
+        budget_item.pm_total = sum(budget_item.pm_years.values(), Decimal("0"))
+        budget_item.year_cells = [
+            (amount, budget_item.pm_years.get(year, Decimal("0"))) for year, amount in budget_item.years.items()
+        ]
         budget_item.remain = budget_item.amount - budget_item.projected_sum
         delta = rebooking_deltas.get(budget_item.id)
         if delta:
             budget_item.rebooked_sum = budget_item.projected_sum + delta
             budget_item.rebooked_remain = budget_item.remain - delta
+            budget_item.rebooked_pm = budget_item.pm_total + rebooking_pm_deltas.get(budget_item.id, Decimal("0"))
 
     table_assignments = get_table_allocations(project, staff_budget_items)
     timeline_assignments = get_timeline_allocations(project)
@@ -87,11 +100,20 @@ def details(request: HttpRequest, acronym: str):
         "projected": sum((item.projected_sum for item in budget_items), Decimal("0.00")),
         "remain": sum((item.remain for item in budget_items), Decimal("0.00")),
     }
+    budget_totals["pm_years"] = [
+        sum((item.pm_years.get(year, Decimal("0")) for item in staff_budget_items), Decimal("0"))
+        for year in project.get_years()
+    ]
+    budget_totals["year_cells"] = list(zip(budget_totals["years"], budget_totals["pm_years"]))
+    budget_totals["pm_total"] = sum((item.pm_total for item in staff_budget_items), Decimal("0"))
     rebooking_delta = sum((rebooking_deltas.get(item.id, Decimal("0.00")) for item in staff_budget_items), Decimal("0.00"))
     has_rebookings = any(item.id in rebooking_deltas for item in staff_budget_items)
     if has_rebookings:
         budget_totals["rebooked_projected"] = budget_totals["projected"] + rebooking_delta
         budget_totals["rebooked_remain"] = budget_totals["remain"] - rebooking_delta
+        budget_totals["rebooked_pm"] = budget_totals["pm_total"] + sum(
+            (rebooking_pm_deltas.get(item.id, Decimal("0")) for item in staff_budget_items), Decimal("0"),
+        )
 
     total_staff_allocated = sum((item.projected_sum for item in staff_budget_items), Decimal("0.00"))
     total_other_allocated = sum((item.projected_sum for item in other_budget_items), Decimal("0.00"))
