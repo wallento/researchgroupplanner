@@ -10,6 +10,8 @@ from staffing.models import StaffMember
 
 # FMM-Werttyp of manual transfer postings between funds.
 TRANSFER_VALUE_TYPE = "66"
+# FMM-Werttyp of Mittelreservierungen (not reduced by the actual payment).
+RESERVATION_VALUE_TYPE = "81"
 
 
 class SAPPositionKind(models.TextChoices):
@@ -88,6 +90,33 @@ class SAPPosition(models.Model):
     @property
     def total(self):
         return self.actual + self.commitment
+
+    @property
+    def reservation_commitment(self):
+        """Commitment from Mittelreservierungen (FMM-Werttyp 81), e.g. travel reservations."""
+        return sum(
+            (Decimal(b["amount"]) for b in self.bookings if b.get("value_type") == RESERVATION_VALUE_TYPE),
+            Decimal("0.00"),
+        )
+
+    @property
+    def planned_amount(self):
+        """Amount the planning should carry.
+
+        Orders (requisitions/purchase orders) are reduced by SAP with each
+        invoice, so their open commitment is still to come. A Mittelreservierung
+        is not reduced by the payment: once anything was paid only the actual
+        counts and a remaining reservation is reported (uncleared_commitment).
+        """
+        reservation = self.reservation_commitment
+        order_commitment = self.commitment - reservation
+        return self.actual + order_commitment + (Decimal("0.00") if self.actual else reservation)
+
+    @property
+    def uncleared_commitment(self):
+        """Reservation still open although actual bookings exist (not cleared in SAP)."""
+        reservation = self.reservation_commitment
+        return reservation if self.actual and reservation else Decimal("0.00")
 
     @property
     def is_transfer(self):

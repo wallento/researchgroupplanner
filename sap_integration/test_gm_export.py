@@ -368,6 +368,37 @@ class TransformTests(ReconciliationTestBase):
         self.assertEqual(planner_transaction.sap_id, "10000001")
         self.assertEqual(self.check("10000001").status, Status.OK)
 
+    def test_uncleared_reservation_is_not_planned_but_flagged(self):
+        position = self.check("8000001").position
+        # Reservation 500 € (value type 81) never reduced, 480 € paid.
+        position.bookings = [b for b in position.bookings if not (b["value_type"] == "81" and Decimal(b["amount"]) < 0)]
+        position.commitment = Decimal("500.00")
+
+        self.assertEqual(position.planned_amount, Decimal("480.00"))
+        self.assertEqual(position.uncleared_commitment, Decimal("500.00"))
+
+    def test_reservation_without_payment_is_planned(self):
+        position = self.check("8000001").position
+        position.actual = Decimal("0.00")
+        position.bookings = [b for b in position.bookings if b["value_type"] == "81" and Decimal(b["amount"]) > 0]
+        position.commitment = Decimal("500.00")
+
+        self.assertEqual(position.planned_amount, Decimal("500.00"))
+        self.assertEqual(position.uncleared_commitment, Decimal("0.00"))
+
+    def test_uncleared_reservation_finding(self):
+        position = self.check("8000001").position
+        position.bookings = [b for b in position.bookings if not (b["value_type"] == "81" and Decimal(b["amount"]) < 0)]
+        position.commitment = Decimal("500.00")
+        position.save()
+        create_transaction(position, self.travel_item)
+
+        check = self.check("8000001")
+
+        self.assertEqual(check.planned_total, Decimal("480.00"))
+        self.assertEqual(check.status, Status.MISMATCH)
+        self.assertIn("nicht vollständig ausgebucht", check.findings[0])
+
 
 @override_settings(SAP_ENABLED=False, SAP_GM_IMPORT_ENABLED=True, STORAGES=STATIC_STORAGE)
 class ReconciliationViewTests(ReconciliationTestBase):

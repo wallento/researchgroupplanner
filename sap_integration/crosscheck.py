@@ -307,8 +307,16 @@ def _check_other(check, transactions, mappings):
         return
 
     planned = check.planned_total
-    if abs(planned - position.total) > AMOUNT_TOLERANCE:
-        check.findings.append(f"SAP {position.total:,.2f} € (Ist + Obligo), geplant {planned:,.2f} €.")
+    source = "Ist + offene Bestellung" if position.actual and position.planned_amount != position.actual else (
+        "Ist" if position.actual else "Obligo, noch kein Ist"
+    )
+    if abs(planned - position.planned_amount) > AMOUNT_TOLERANCE:
+        check.findings.append(f"SAP {position.planned_amount:,.2f} € ({source}), geplant {planned:,.2f} €.")
+    if position.uncleared_commitment:
+        check.findings.append(
+            f"Mittelreservierung nicht vollständig ausgebucht: Obligo {position.uncleared_commitment:,.2f} € "
+            f"trotz Ist {position.actual:,.2f} € – bitte in SAP ausbuchen lassen; die Reservierung wird nicht geplant."
+        )
     if check.budget_item and any(t.budget_item_id != check.budget_item.id for t in check.transactions):
         check.findings.append(f"Geplant auf anderem Budget als E/A-Art {position.cost_type} ({check.budget_item.title}).")
     check.status = Status.MISMATCH if check.findings else Status.OK

@@ -182,7 +182,7 @@ def create_transaction(position, budget_item):
     return OtherBudgetItemTransaction.objects.create(
         budget_item=budget_item,
         date=position.first_date or date.today(),
-        amount=position.total,
+        amount=position.planned_amount,
         description=_transaction_description(position),
         sap_id=position.reference,
     )
@@ -190,7 +190,7 @@ def create_transaction(position, budget_item):
 
 @transaction.atomic
 def update_transaction_amount(position, planner_transaction):
-    planner_transaction.amount = position.total
+    planner_transaction.amount = position.planned_amount
     planner_transaction.save(update_fields=["amount"])
 
 

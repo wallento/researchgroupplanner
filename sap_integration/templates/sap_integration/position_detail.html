@@ -145,7 +145,7 @@
                 <form method="post" class="mb-4">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="update_amount">
-                    <button class="btn btn-primary btn-sm">Betrag {{ position.total|floatformat:"2g" }} € übernehmen</button>
+                    <button class="btn btn-primary btn-sm">Betrag {{ position.planned_amount|floatformat:"2g" }} € übernehmen</button>
                 </form>
             {% endif %}
         {% elif check.status != 'ignored' %}
@@ -154,7 +154,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="create_transaction">
                 {% bootstrap_form create_transaction_form %}
-                <div class="form-text mb-3">Legt einen Planungseintrag über {{ position.total|floatformat:"2g" }} € (Ist + Obligo) mit SAP-Referenz {{ position.reference }} an.</div>
+                <div class="form-text mb-3">Legt einen Planungseintrag über {{ position.planned_amount|floatformat:"2g" }} € ({% if position.uncleared_commitment %}ohne nicht ausgebuchte Reservierung{% elif position.actual %}Ist{% if position.commitment %} + offene Bestellung{% endif %}{% else %}Obligo, noch kein Ist{% endif %}) mit SAP-Referenz {{ position.reference }} an.</div>
                 <div><button class="btn btn-primary">Übernehmen</button></div>
             </form>
 
