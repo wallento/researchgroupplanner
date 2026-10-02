@@ -33,6 +33,7 @@
             </tr>
         </tfoot>
     </table>
+    <div class="print-page-break"></div>
 
     {% for item in budget_items %}
         <h3 id="budget-{{ item.id }}" class="mt-4">{{ item.title }}</h3>
@@ -86,6 +87,7 @@
                 </tr>
             </tfoot>
         </table>
+        {% if not forloop.last %}<div class="print-page-break"></div>{% endif %}
     {% endfor %}
 {% else %}
     <p class="text-muted">Für dieses Projekt sind keine Sachmittel-Budgetposten angelegt.</p>

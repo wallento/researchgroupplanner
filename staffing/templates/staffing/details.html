@@ -241,6 +241,7 @@
             {% endfor %}
           </tbody>
         </table>
+        <div class="print-page-break"></div>
       {% else %}
         <p class="text-muted">Keine Finanzierungszuordnungen hinterlegt.</p>
       {% endif %}
@@ -297,6 +298,7 @@
             </tr>
             {% endfor %}
       </table>
+      {% if not forloop.last %}<div class="print-page-break"></div>{% endif %}
     {% endfor %}
   </ul>
 {% endblock %}
