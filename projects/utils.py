@@ -71,8 +71,26 @@ def get_timeline_allocations(project: Project) -> list[dict]:
             "category": allocation.employment.get_category(),
             "status": allocation.employment.status,
             "status_label": allocation.employment.get_status_display(),
+            "rebooking": False,
             "start": allocation.start_date,
             "end": allocation.end_date or allocation.employment.end_date
+        })
+    # Open Umbuchungen onto this project are shown as overlay bars.
+    from staffing.models import Rebooking
+    for rebooking in Rebooking.objects.filter(budget_item__project=project).select_related(
+        "allocation__employment__staff_member", "allocation__budget_item__project",
+    ):
+        employment = rebooking.allocation.employment
+        source = rebooking.allocation.budget_item
+        allocations.append({
+            "employee": employment.staff_member,
+            "category": employment.get_category(),
+            "status": employment.status,
+            "status_label": employment.get_status_display(),
+            "rebooking": True,
+            "rebooking_from": source.project.acronym if source else "",
+            "start": rebooking.start_date,
+            "end": rebooking.end,
         })
     return allocations
 

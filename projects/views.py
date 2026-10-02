@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from .models import Landesstelle, OtherBudgetItemTransaction, StaffBudgetItem, Project
 from staffing.models import StaffFundingAllocation
+from staffing.utils import rebooking_cost_deltas
 from django.http import HttpRequest
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect
@@ -42,6 +43,7 @@ def details(request: HttpRequest, acronym: str):
     project = get_object_or_404(Project, acronym=acronym)
 
     staff_budget_items = StaffBudgetItem.objects.filter(project=project).all()
+    rebooking_deltas = rebooking_cost_deltas()
 
     for budget_item in staff_budget_items:
         budget_item.staff_allocations = []
@@ -56,6 +58,10 @@ def details(request: HttpRequest, acronym: str):
             for allocation in budget_item.staff_allocations:
                 budget_item.years[year] += get_allocations_salary_sum_of_year(year, allocation)
         budget_item.remain = budget_item.amount - budget_item.projected_sum
+        delta = rebooking_deltas.get(budget_item.id)
+        if delta:
+            budget_item.rebooked_sum = budget_item.projected_sum + delta
+            budget_item.rebooked_remain = budget_item.remain - delta
 
     table_assignments = get_table_allocations(project, staff_budget_items)
     timeline_assignments = get_timeline_allocations(project)
@@ -81,6 +87,11 @@ def details(request: HttpRequest, acronym: str):
         "projected": sum((item.projected_sum for item in budget_items), Decimal("0.00")),
         "remain": sum((item.remain for item in budget_items), Decimal("0.00")),
     }
+    rebooking_delta = sum((rebooking_deltas.get(item.id, Decimal("0.00")) for item in staff_budget_items), Decimal("0.00"))
+    has_rebookings = any(item.id in rebooking_deltas for item in staff_budget_items)
+    if has_rebookings:
+        budget_totals["rebooked_projected"] = budget_totals["projected"] + rebooking_delta
+        budget_totals["rebooked_remain"] = budget_totals["remain"] - rebooking_delta
 
     total_staff_allocated = sum((item.projected_sum for item in staff_budget_items), Decimal("0.00"))
     total_other_allocated = sum((item.projected_sum for item in other_budget_items), Decimal("0.00"))
@@ -90,6 +101,10 @@ def details(request: HttpRequest, acronym: str):
     remain_sum = None
     if project.budget_total is not None:
         remain_sum = (project.budget_total - total_allocated).quantize(Decimal("0.01"))
+    rebooked_allocated = rebooked_remain = None
+    if has_rebookings:
+        rebooked_allocated = total_allocated + rebooking_delta
+        rebooked_remain = remain_sum - rebooking_delta if remain_sum is not None else None
 
     parameters = {
         "project": project,
@@ -100,6 +115,8 @@ def details(request: HttpRequest, acronym: str):
         "timeline_assignments": timeline_assignments,
         "allocated_sum": total_allocated,
         "remain_sum": remain_sum,
+        "rebooked_allocated": rebooked_allocated,
+        "rebooked_remain": rebooked_remain,
     }
 
     return render(request, "projects/details.html", parameters)

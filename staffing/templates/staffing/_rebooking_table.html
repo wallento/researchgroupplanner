@@ -1,0 +1,33 @@
+{% if rebookings %}
+    <table class="table table-bordered align-middle">
+        <thead>
+            <tr>
+                <th>Person</th>
+                <th>Von</th>
+                <th>Nach</th>
+                <th>Umfang</th>
+                <th>Zeitraum</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for rebooking in rebookings %}
+                <tr>
+                    <td><a href="{% url 'staffing:details' rebooking.allocation.employment.staff_member_id %}">{{ rebooking.allocation.employment.staff_member }}</a>
+                        {% if rebooking.allocation.employment.status != "contract" %}<span class="badge text-bg-info ms-1">{{ rebooking.allocation.employment.get_status_display }}</span>{% endif %}
+                    </td>
+                    <td>
+                        {% include "staffing/_allocation_source.html" with allocation=rebooking.allocation %}
+                        <span class="text-muted small">({{ rebooking.allocation.percentage|floatformat:"-2" }} %)</span>
+                    </td>
+                    <td><a href="{% url 'projects:details' rebooking.budget_item.project.acronym %}">{{ rebooking.budget_item.project.acronym }}</a> – {{ rebooking.budget_item.title }}</td>
+                    <td>{{ rebooking.percentage|floatformat:"-2" }} %</td>
+                    <td class="text-nowrap">{{ rebooking.start_date|date:"d.m.Y" }} – {{ rebooking.end|date:"d.m.Y" }}</td>
+                    <td class="text-nowrap">{% include "staffing/_rebooking_actions.html" with next=rebookings_url %}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p class="text-muted">Keine offenen Umbuchungen.</p>
+{% endif %}

@@ -1,0 +1,34 @@
+{% extends "controlling/base.html" %}
+
+{% load django_bootstrap5 %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ title }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'staffing:details' allocation.employment.staff_member_id %}">← {{ allocation.employment.staff_member }}</a>
+</p>
+<p class="text-muted">
+    Aktuell:
+    {% if allocation.budget_item_id %}Projekt {{ allocation.budget_item.project.acronym }} – {{ allocation.budget_item.title }}
+    {% elif allocation.annual_pool_budget_id %}Annual Pool {{ allocation.annual_pool_budget.annual_pool.title }} ({{ allocation.annual_pool_budget.year }})
+    {% elif allocation.is_universal %}Universalprojekt
+    {% else %}Landesstelle {{ allocation.landesstelle.title }}{% endif %},
+    {{ allocation.percentage|floatformat:"-2" }} %,
+    {{ allocation.start_date|date:"d.m.Y" }} – {{ allocation.end_date|default:allocation.employment.end_date|date:"d.m.Y" }}
+</p>
+{% if is_rebooking %}
+    <p class="text-muted small">
+        Die Umbuchung wird zusätzlich zur Zuordnung gespeichert und ändert sie nicht; sie lässt sich jederzeit löschen.
+        Erst „Abschließen“ teilt die Zuordnung auf und übernimmt den Zeitraum auf das neue Budget.
+    </p>
+{% endif %}
+
+<form method="post" style="max-width: 40rem;">
+    {% csrf_token %}
+    {% bootstrap_form form %}
+    <button type="submit" class="btn btn-primary">{{ submit }}</button>
+    <a class="btn btn-link" href="{% url 'staffing:details' allocation.employment.staff_member_id %}">Abbrechen</a>
+</form>
+{% endblock %}

@@ -102,11 +102,11 @@
               return {
                   id: itemId,
                   group: entry.group,
-                  content: entry.percentage + '\u00a0%' + (entry.status !== 'contract' ? ' (' + entry.status_label + ')' : ''),
+                  content: entry.percentage + '\u00a0%' + (entry.status !== 'contract' ? ' (' + entry.status_label + ')' : '') + (entry.rebooking ? ' ⇄' : ''),
                   title: escapeHtml(entry.title),
                   start: start,
                   end: end,
-                  className: (entry.link ? 'has-link ' : '') + 'status-' + entry.status,
+                  className: (entry.link ? 'has-link ' : '') + 'status-' + entry.status + (entry.rebooking ? ' allocation-rebook' : ''),
               };
           });
 
@@ -186,6 +186,7 @@
               <th>Quelle</th>
               <th>Prozent</th>
               <th>Zeitraum</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -201,10 +202,27 @@
                   {% else %}
                     Landesstelle {{ allocation.landesstelle.title }}
                   {% endif %}
+                  {% if allocation.is_rebooking %}<span class="badge text-bg-secondary ms-1" title="Durch eine abgeschlossene Umbuchung entstanden">umgebucht</span>{% endif %}
                 </td>
                 <td>{{ allocation.percentage }}%</td>
                 <td>{{ allocation.start_date }} - {{ allocation.end_date|default:employment.end_date }}</td>
+                <td class="text-nowrap">
+                  <a class="btn btn-sm btn-outline-secondary" href="{% url 'staffing:edit_allocation' allocation.id %}">Bearbeiten</a>
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'staffing:rebook_allocation' allocation.id %}">Umbuchen</a>
+
+                </td>
               </tr>
+              {% for rebooking in allocation.open_rebookings %}
+                <tr class="table-warning">
+                  <td class="ps-4">
+                    ⇄ Umbuchung nach Projekt {{ rebooking.budget_item.project.acronym }} - {{ rebooking.budget_item.title }}
+                    <span class="badge text-bg-warning ms-1">offen</span>
+                  </td>
+                  <td>{{ rebooking.percentage }}%</td>
+                  <td>{{ rebooking.start_date }} - {{ rebooking.end }}</td>
+                  <td class="text-nowrap">{% include "staffing/_rebooking_actions.html" %}</td>
+                </tr>
+              {% endfor %}
             {% endfor %}
           </tbody>
         </table>

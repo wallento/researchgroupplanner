@@ -6,3 +6,6 @@
 {% else %}
     €&nbsp;{{ used }} / –
 {% endif %}
+{% if rebooked is not None and rebooked != "" %}
+    <div class="small text-muted text-nowrap" title="Wert, wenn die offenen Umbuchungen übernommen würden">(Umbuchungen: €&nbsp;{{ rebooked }}{% if rebooked_percent is not None %}, {{ rebooked_percent }}&nbsp;%{% endif %})</div>
+{% endif %}

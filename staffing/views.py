@@ -1,7 +1,7 @@
 from controlling.utils import render
 
 from django.contrib import messages
-from datetime import date
+from datetime import date, timedelta
 
 from dateutil.relativedelta import relativedelta
 from django.db import transaction
@@ -9,13 +9,13 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from projects.models import Project
-from staffing.models import Employment, StaffFundingAllocation, StaffMember
+from staffing.models import Employment, Rebooking, StaffFundingAllocation, StaffMember
 from django.http import HttpRequest
 from django.utils import timezone
 
 from projects.models import EmploymentCategories
 
-from .forms import PlanEmploymentForm
+from .forms import AllocationForm, PlanEmploymentForm, RebookingForm
 from .utils import (
     apply_tariff_salaries,
     get_salaries_by_month,
@@ -85,6 +85,9 @@ def details(request: HttpRequest, staff_id: int):
         employment.allocations = employment.stafffundingallocation_set.all().order_by("start_date")
         for allocation in employment.allocations:
             allocation_timeline.append(_timeline_entry(allocation))
+            allocation.open_rebookings = list(allocation.rebookings.select_related("budget_item__project"))
+            for rebooking in allocation.open_rebookings:
+                allocation_timeline.append(_rebooking_timeline_entry(rebooking))
         sap_actuals = get_sap_actuals_by_month(employment.allocations)
         employment.has_sap_actuals = bool(sap_actuals)
         employment.sap_mismatches = get_sap_salary_mismatches(employment.salaries_by_month, sap_actuals)
@@ -132,8 +135,31 @@ def _timeline_entry(allocation):
         "percentage": float(allocation.percentage),
         "status": allocation.employment.status,
         "status_label": allocation.employment.get_status_display(),
+        "rebooking": False,
         "start": allocation.start_date.isoformat(),
         "end": end.isoformat(),
+    }
+
+
+def _rebooking_timeline_entry(rebooking):
+    """Overlay bar of an open Umbuchung in the target project's row."""
+    project = rebooking.budget_item.project
+    employment = rebooking.allocation.employment
+    return {
+        "id": f"rebooking-{rebooking.id}",
+        "group": f"project-{project.id}",
+        "label": project.acronym,
+        "link": reverse("projects:details", args=[project.acronym]),
+        "title": (
+            f"Umbuchung (offen) auf {project.acronym} – {rebooking.budget_item.title}: "
+            f"{rebooking.percentage.normalize():f} % ({rebooking.start_date:%d.%m.%Y} – {rebooking.end:%d.%m.%Y})"
+        ),
+        "percentage": float(rebooking.percentage),
+        "status": employment.status,
+        "status_label": employment.get_status_display(),
+        "rebooking": True,
+        "start": rebooking.start_date.isoformat(),
+        "end": rebooking.end.isoformat(),
     }
 
 def plan_employment(request: HttpRequest):
@@ -217,3 +243,116 @@ def estimate_salaries(request: HttpRequest, employment_id: int):
         if missing:
             messages.warning(request, "Ohne Tabellenwert, unverändert gelassen: " + ", ".join(missing))
     return redirect("staffing:details", staff_id=employment.staff_member_id)
+
+
+def _allocation(allocation_id):
+    return get_object_or_404(
+        StaffFundingAllocation.objects.select_related("employment__staff_member", "budget_item__project"),
+        id=allocation_id,
+    )
+
+
+def edit_allocation(request: HttpRequest, allocation_id: int):
+    allocation = _allocation(allocation_id)
+    form = AllocationForm(request.POST or None, instance=allocation)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Zuordnung gespeichert.")
+        return redirect("staffing:details", staff_id=allocation.employment.staff_member_id)
+    return render(request, "staffing/allocation_form.html", {
+        "allocation": allocation, "form": form, "title": "Zuordnung bearbeiten", "submit": "Speichern",
+    })
+
+
+def rebook_allocation(request: HttpRequest, allocation_id: int):
+    """Create an open Umbuchung; the allocation stays unchanged until it is completed."""
+    allocation = _allocation(allocation_id)
+    form = RebookingForm(request.POST or None, allocation=allocation)
+    if request.method == "POST" and form.is_valid():
+        rebooking = form.save()
+        messages.success(request, f"Umbuchung ab {rebooking.start_date:%d.%m.%Y} auf {rebooking.budget_item} angelegt.")
+        return redirect("staffing:details", staff_id=allocation.employment.staff_member_id)
+    return render(request, "staffing/allocation_form.html", {
+        "allocation": allocation, "form": form, "title": "Zuordnung umbuchen", "submit": "Umbuchung anlegen",
+        "is_rebooking": True,
+    })
+
+
+def _rebooking(rebooking_id):
+    return get_object_or_404(
+        Rebooking.objects.select_related("allocation__employment__staff_member", "allocation__budget_item__project",
+                                         "budget_item__project"),
+        id=rebooking_id,
+    )
+
+
+def _redirect_back(request, rebooking):
+    next_url = request.POST.get("next") or ""
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("staffing:details", staff_id=rebooking.allocation.employment.staff_member_id)
+
+
+def edit_rebooking(request: HttpRequest, rebooking_id: int):
+    rebooking = _rebooking(rebooking_id)
+    form = RebookingForm(request.POST or None, allocation=rebooking.allocation, instance=rebooking)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Umbuchung gespeichert.")
+        return redirect("staffing:details", staff_id=rebooking.allocation.employment.staff_member_id)
+    return render(request, "staffing/allocation_form.html", {
+        "allocation": rebooking.allocation, "form": form, "title": "Umbuchung bearbeiten", "submit": "Speichern",
+        "is_rebooking": True,
+    })
+
+
+@require_POST
+def delete_rebooking(request: HttpRequest, rebooking_id: int):
+    rebooking = _rebooking(rebooking_id)
+    rebooking.delete()
+    messages.success(request, "Umbuchung gelöscht; die Zuordnung ist unverändert.")
+    return _redirect_back(request, rebooking)
+
+
+@require_POST
+def complete_rebooking(request: HttpRequest, rebooking_id: int):
+    """Apply an Umbuchung: split the allocation around the rebooked period."""
+    rebooking = _rebooking(rebooking_id)
+    allocation = rebooking.allocation
+    employment_end = allocation.employment.end_date
+    original_end, rebooked_end = allocation.end_date, rebooking.end
+    with transaction.atomic():
+        if rebooked_end < rebooking.allocation_end:
+            # Remainder after the rebooked period stays on the original budget.
+            remainder = StaffFundingAllocation.objects.get(pk=allocation.pk)
+            remainder.pk = None
+            remainder.start_date = rebooked_end + timedelta(days=1)
+            remainder.end_date = original_end
+            remainder.save()
+        if rebooking.start_date > allocation.start_date:
+            allocation.end_date = rebooking.start_date - timedelta(days=1)
+            allocation.save(update_fields=["end_date"])
+            rebooked = StaffFundingAllocation(employment=allocation.employment, start_date=rebooking.start_date)
+        else:
+            rebooked = allocation
+        rebooked.budget_item = rebooking.budget_item
+        rebooked.landesstelle = rebooked.annual_pool_budget = None
+        rebooked.is_universal = False
+        rebooked.percentage = rebooking.percentage
+        rebooked.end_date = None if (rebooked_end == employment_end and original_end is None) else rebooked_end
+        rebooked.is_rebooking = True
+        rebooked.full_clean()
+        rebooked.save()
+        rebooking.delete()
+    messages.success(request, f"Umbuchung für {allocation.employment.staff_member} abgeschlossen (Vertrag).")
+    return _redirect_back(request, rebooking)
+
+
+def rebookings(request: HttpRequest):
+    """Open Umbuchungen."""
+    return render(request, "staffing/rebookings.html", {
+        "rebookings": Rebooking.objects.select_related(
+            "allocation__employment__staff_member", "allocation__budget_item__project", "allocation__landesstelle",
+            "allocation__annual_pool_budget__annual_pool", "budget_item__project",
+        ).order_by("start_date", "allocation__employment__staff_member__last_name"),
+    })

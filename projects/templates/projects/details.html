@@ -20,7 +20,10 @@
     </tr>
     <tr>
         <th>Budget:</th>
-        <td>€&nbsp;{{ project.budget_total }} (€&nbsp;{{ allocated_sum }} allokiert, €&nbsp;{{ remain_sum }} nicht allokiert)</td>
+        <td>
+            €&nbsp;{{ project.budget_total }} (€&nbsp;{{ allocated_sum }} allokiert, €&nbsp;{{ remain_sum }} nicht allokiert)
+            {% if rebooked_allocated is not None %}<div class="small text-muted">(Umbuchungen: €&nbsp;{{ rebooked_allocated }} allokiert{% if rebooked_remain is not None %}, €&nbsp;{{ rebooked_remain }} nicht allokiert{% endif %})</div>{% endif %}
+        </td>
     </tr>
     {% if project.no_overhead %}
     <tr>
@@ -58,8 +61,8 @@
                 {% for year, amount in budget.years.items %}
                     <td>€&nbsp;{{ amount }}</td>
                 {% endfor %}
-                <td>€&nbsp;{{ budget.projected_sum }}</td>
-                <td>€&nbsp;{{ budget.remain }}</td>
+                <td>€&nbsp;{{ budget.projected_sum }}{% if budget.rebooked_sum %}<div class="small text-muted text-nowrap">(Umbuchungen: €&nbsp;{{ budget.rebooked_sum }})</div>{% endif %}</td>
+                <td>€&nbsp;{{ budget.remain }}{% if budget.rebooked_sum %}<div class="small text-muted text-nowrap">(Umbuchungen: €&nbsp;{{ budget.rebooked_remain }})</div>{% endif %}</td>
             </tr>
         {% endfor %}
         {% for budget in other_budget_items %}
@@ -81,8 +84,8 @@
             {% for amount in budget_totals.years %}
                 <td>€&nbsp;{{ amount }}</td>
             {% endfor %}
-            <td>€&nbsp;{{ budget_totals.projected }}</td>
-            <td>€&nbsp;{{ budget_totals.remain }}</td>
+            <td>€&nbsp;{{ budget_totals.projected }}{% if budget_totals.rebooked_projected is not None %}<div class="small text-muted fw-normal text-nowrap">(Umbuchungen: €&nbsp;{{ budget_totals.rebooked_projected }})</div>{% endif %}</td>
+            <td>€&nbsp;{{ budget_totals.remain }}{% if budget_totals.rebooked_remain is not None %}<div class="small text-muted fw-normal text-nowrap">(Umbuchungen: €&nbsp;{{ budget_totals.rebooked_remain }})</div>{% endif %}</td>
         </tr>
     </tfoot>
 </table>
@@ -218,9 +221,9 @@
         items.push({
             id: 'assignment_{{ forloop.counter0 }}',
             group: existingGroups['{{ assignment.employee|escapejs }}'],
-            content: '{{ assignment.category|escapejs }}{% if assignment.status != "contract" %} ({{ assignment.status_label|escapejs }}){% endif %}',
-            className: 'status-{{ assignment.status }}',
-            title: '<strong>{{ assignment.employee|escapejs }}</strong><br>{{ assignment.category|escapejs }}',
+            content: '{{ assignment.category|escapejs }}{% if assignment.status != "contract" %} ({{ assignment.status_label|escapejs }}){% endif %}{% if assignment.rebooking %} ⇄{% endif %}',
+            className: 'status-{{ assignment.status }}{% if assignment.rebooking %} allocation-rebook{% endif %}',
+            title: '<strong>{{ assignment.employee|escapejs }}</strong><br>{{ assignment.category|escapejs }}{% if assignment.rebooking %}<br>Umbuchung (offen){% if assignment.rebooking_from %} von {{ assignment.rebooking_from|escapejs }}{% endif %}{% endif %}',
             start: gpBuildDate({{ assignment.start|date:"Y" }}, {{ assignment.start|date:"n" }}, {{ assignment.start|date:"j" }}),
             end: gpBuildDate({{ assignment.end|date:"Y" }}, {{ assignment.end|date:"n" }}, {{ assignment.end|date:"j" }})
         });
@@ -312,7 +315,7 @@
     {% endfor %}
         <tr>
             <td><strong>Summe:</strong></td>
-            <td style="text-align: right;">€&nbsp;{{ budget.projected_sum }}<br>(nicht allokiert: €&nbsp;{{ budget.remain }})</td>
+            <td style="text-align: right;">€&nbsp;{{ budget.projected_sum }}<br>(nicht allokiert: €&nbsp;{{ budget.remain }}){% if budget.rebooked_sum is not None and budget.rebooked_sum != "" %}<div class="small text-muted">(Umbuchungen: €&nbsp;{{ budget.rebooked_sum }}, nicht allokiert: €&nbsp;{{ budget.rebooked_remain }})</div>{% endif %}</td>
         </tr>
     </tbody>
 </table>

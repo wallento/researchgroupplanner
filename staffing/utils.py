@@ -300,3 +300,24 @@ def _month_end(month):
 
     first = date.fromisoformat(f"{month}-01")
     return first.replace(day=monthrange(first.year, first.month)[1])
+
+
+def rebooking_cost_deltas(rebookings=None):
+    """{staff budget item id: cost change} if the open Umbuchungen were applied."""
+    from projects.utils import calculate_salary_for_allocation
+
+    from .models import Rebooking
+
+    if rebookings is None:
+        rebookings = Rebooking.objects.select_related("allocation__employment")
+    deltas = {}
+    for rebooking in rebookings:
+        source, target = rebooking.as_allocations()
+        if source.budget_item_id:
+            deltas[source.budget_item_id] = (
+                deltas.get(source.budget_item_id, Decimal("0.00")) - calculate_salary_for_allocation(source).salary_sum
+            )
+        deltas[target.budget_item_id] = (
+            deltas.get(target.budget_item_id, Decimal("0.00")) + calculate_salary_for_allocation(target).salary_sum
+        )
+    return {item_id: delta for item_id, delta in deltas.items() if delta}

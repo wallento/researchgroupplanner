@@ -2,7 +2,7 @@ from django import forms
 
 from projects.models import EmploymentCategories, StaffBudgetItem
 
-from .models import EMPLOYMENT_STATUSES, MAX_LEVEL, SalaryCategory, StaffMember
+from .models import EMPLOYMENT_STATUSES, MAX_LEVEL, Rebooking, SalaryCategory, StaffFundingAllocation, StaffMember
 
 
 class DateInput(forms.DateInput):
@@ -67,3 +67,47 @@ class PlanEmploymentForm(forms.Form):
         if level_start and start and level_start > start:
             self.add_error("level_start_date", "Der Stufenbeginn darf nicht nach dem Beginn der Anstellung liegen.")
         return data
+
+
+def _budget_item_field(**kwargs):
+    field = forms.ModelChoiceField(
+        StaffBudgetItem.objects.select_related("project").order_by("project__acronym", "title"),
+        label="Projekt / Personalbudget",
+        **kwargs,
+    )
+    field.label_from_instance = lambda item: f"{item.project.acronym} – {item.title}"
+    return field
+
+
+class AllocationForm(forms.ModelForm):
+    """Edit an allocation; the budget is only changeable for project allocations."""
+
+    class Meta:
+        model = StaffFundingAllocation
+        fields = ["budget_item", "percentage", "start_date", "end_date"]
+        labels = {"percentage": "Umfang (%)", "start_date": "Beginn", "end_date": "Ende"}
+        widgets = {"start_date": DateInput(), "end_date": DateInput()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.budget_item_id:
+            self.fields["budget_item"] = _budget_item_field()
+        else:
+            del self.fields["budget_item"]
+        self.fields["end_date"].help_text = "Leer lassen für das Ende der Anstellung."
+
+
+class RebookingForm(forms.ModelForm):
+    """Umbuchung of an allocation to another budget for a period."""
+
+    class Meta:
+        model = Rebooking
+        fields = ["budget_item", "percentage", "start_date", "end_date"]
+        labels = {"start_date": "Umbuchen ab"}
+        widgets = {"start_date": DateInput(), "end_date": DateInput()}
+
+    def __init__(self, *args, allocation, **kwargs):
+        instance = kwargs.get("instance") or Rebooking(allocation=allocation, percentage=allocation.percentage)
+        kwargs["instance"] = instance
+        super().__init__(*args, **kwargs)
+        self.fields["budget_item"] = _budget_item_field()

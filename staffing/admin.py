@@ -4,6 +4,7 @@ from django.contrib import admin
 from .models import (
     Employment,
     EmploymentSalaries,
+    Rebooking,
     SalaryCategory,
     SalaryTable,
     SalaryTableEntry,
@@ -56,7 +57,14 @@ class EmploymentAdmin(admin.ModelAdmin):
     inlines = [EmploymentSalariesInline, StaffFundingAllocationInline]
 
 admin.site.register(Employment, EmploymentAdmin)
-admin.site.register(StaffFundingAllocation)
+
+
+@admin.register(StaffFundingAllocation)
+class StaffFundingAllocationAdmin(admin.ModelAdmin):
+    list_display = ("employment", "budget_item", "percentage", "start_date", "end_date", "is_rebooking")
+    list_filter = ("is_rebooking", "budget_item__project")
+    search_fields = ("employment__staff_member__first_name", "employment__staff_member__last_name", "sap_reference")
+    list_select_related = ("employment__staff_member", "budget_item__project")
 
 
 @admin.register(SalaryCategory)
@@ -75,3 +83,11 @@ class SalaryTableEntryInline(admin.TabularInline):
 class SalaryTableAdmin(admin.ModelAdmin):
     list_display = ("name", "valid_from", "valid_until")
     inlines = [SalaryTableEntryInline]
+
+
+@admin.register(Rebooking)
+class RebookingAdmin(admin.ModelAdmin):
+    list_display = ("allocation", "budget_item", "percentage", "start_date", "end_date")
+    list_filter = ("budget_item__project",)
+    search_fields = ("allocation__employment__staff_member__first_name", "allocation__employment__staff_member__last_name")
+    list_select_related = ("allocation__employment__staff_member", "budget_item__project")

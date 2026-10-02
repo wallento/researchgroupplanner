@@ -1,0 +1,13 @@
+<a class="btn btn-sm btn-outline-secondary" href="{% url 'staffing:edit_rebooking' rebooking.id %}">Bearbeiten</a>
+<form method="post" action="{% url 'staffing:complete_rebooking' rebooking.id %}" class="d-inline"
+      onsubmit="return confirm('Umbuchung abschließen? Die Zuordnung wird aufgeteilt und der Zeitraum auf das neue Budget übernommen.');">
+    {% csrf_token %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <button type="submit" class="btn btn-sm btn-outline-success" title="Umbuchung ist vertraglich umgesetzt">Abschließen</button>
+</form>
+<form method="post" action="{% url 'staffing:delete_rebooking' rebooking.id %}" class="d-inline"
+      onsubmit="return confirm('Umbuchung löschen? Die Zuordnung bleibt unverändert.');">
+    {% csrf_token %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <button type="submit" class="btn btn-sm btn-outline-danger">Löschen</button>
+</form>

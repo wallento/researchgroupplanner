@@ -302,6 +302,9 @@ class StaffFundingAllocation(models.Model):
         default="",
         help_text="Referenzbelegnummer der SAP-Mittelreservierung, z.B. 4000123",
     )
+    is_rebooking = models.BooleanField(
+        "Umgebucht", default=False, help_text="Durch eine abgeschlossene Umbuchung entstanden.",
+    )
 
     def clean(self):
         super().clean()
@@ -341,3 +344,61 @@ class StaffFundingAllocation(models.Model):
     def __str__(self):
         end_date = self.end_date if self.end_date else "offen"
         return f"{self.employment.staff_member} - {self.percentage}% ({self.start_date} - {end_date}) in {self.source()}"
+
+
+class Rebooking(models.Model):
+    """Open Umbuchung of (part of) an allocation to another budget.
+
+    It leaves the allocation untouched until it is completed, so deleting it
+    has no side effects; completing it splits the allocation accordingly.
+    """
+
+    allocation = models.ForeignKey(
+        StaffFundingAllocation, on_delete=models.CASCADE, related_name="rebookings", verbose_name="Zuordnung",
+    )
+    budget_item = models.ForeignKey(StaffBudgetItem, on_delete=models.CASCADE, verbose_name="Nach (Personalbudget)")
+    percentage = models.DecimalField(
+        "Umfang (%)", max_digits=5, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    start_date = models.DateField("Ab")
+    end_date = models.DateField("Bis", null=True, blank=True, help_text="Leer lassen für das Ende der Zuordnung.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["start_date", "pk"]
+        verbose_name = "Umbuchung"
+        verbose_name_plural = "Umbuchungen"
+
+    def __str__(self):
+        return f"{self.allocation.employment.staff_member}: {self.budget_item} ab {self.start_date:%d.%m.%Y}"
+
+    @property
+    def allocation_end(self):
+        return self.allocation.end_date or self.allocation.employment.end_date
+
+    @property
+    def end(self):
+        return self.end_date or self.allocation_end
+
+    def clean(self):
+        super().clean()
+        if not (self.allocation_id and self.start_date):
+            return
+        if not (self.allocation.start_date <= self.start_date <= self.allocation_end):
+            raise ValidationError(
+                f"„Ab“ muss in der Zuordnung liegen ({self.allocation.start_date:%d.%m.%Y} – {self.allocation_end:%d.%m.%Y})."
+            )
+        if self.end_date and not (self.start_date <= self.end_date <= self.allocation_end):
+            raise ValidationError("„Bis“ muss zwischen „Ab“ und dem Ende der Zuordnung liegen.")
+
+    def as_allocations(self):
+        """Unsaved (source, target) allocations covering the rebooked period, for cost calculations."""
+        source = StaffFundingAllocation(
+            employment=self.allocation.employment, budget_item=self.allocation.budget_item,
+            percentage=self.allocation.percentage, start_date=self.start_date, end_date=self.end,
+        )
+        target = StaffFundingAllocation(
+            employment=self.allocation.employment, budget_item=self.budget_item,
+            percentage=self.percentage, start_date=self.start_date, end_date=self.end,
+        )
+        return source, target

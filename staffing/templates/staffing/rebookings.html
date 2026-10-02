@@ -1,0 +1,14 @@
+{% extends "controlling/base.html" %}
+
+{% block title %}Umbuchungen{% endblock %}
+{% block heading %}Umbuchungen{% endblock %}
+
+{% block content %}
+<p class="text-muted">
+    Offene Umbuchungen. Sie ändern die Zuordnungen nicht, bis sie mit „Abschließen“ übernommen werden; „Löschen“
+    entfernt nur die Umbuchung.
+</p>
+
+{% url 'staffing:rebookings' as rebookings_url %}
+{% include "staffing/_rebooking_table.html" with rebookings_url=rebookings_url %}
+{% endblock %}
