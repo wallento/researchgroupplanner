@@ -15,7 +15,9 @@ from django.views.decorators.http import require_POST
 from .utils import (
     budget_usage_percent,
     calculate_salary_for_allocation,
+    amount_in_period,
     get_allocation_person_months,
+    person_months_in_period,
     get_allocations_salary_sum_of_year,
     get_table_allocations,
     get_timeline_allocations,
@@ -115,6 +117,33 @@ def details(request: HttpRequest, acronym: str):
             (rebooking_pm_deltas.get(item.id, Decimal("0")) for item in staff_budget_items), Decimal("0"),
         )
 
+    reporting_periods = list(project.reporting_periods.all())
+    reporting = None
+    if reporting_periods:
+        rows = []
+        for item in staff_budget_items:
+            rows.append({"title": item.title, "staff": True, "cells": [
+                (
+                    sum((amount_in_period(sa.months, p.start_date, p.end_date) for sa in item.staff_allocations), Decimal("0.00")),
+                    sum((person_months_in_period(sa.allocation, p.start_date, p.end_date) for sa in item.staff_allocations), Decimal("0")),
+                )
+                for p in reporting_periods
+            ]})
+        for item in other_budget_items:
+            transactions = item.get_transactions()
+            rows.append({"title": item.title, "staff": False, "cells": [
+                (sum((t.amount for t in transactions if p.start_date <= t.date <= p.end_date), Decimal("0.00")), None)
+                for p in reporting_periods
+            ]})
+        totals = [
+            (
+                sum((row["cells"][i][0] for row in rows), Decimal("0.00")),
+                sum((row["cells"][i][1] for row in rows if row["staff"]), Decimal("0")),
+            )
+            for i in range(len(reporting_periods))
+        ]
+        reporting = {"periods": reporting_periods, "rows": rows, "totals": totals}
+
     total_staff_allocated = sum((item.projected_sum for item in staff_budget_items), Decimal("0.00"))
     total_other_allocated = sum((item.projected_sum for item in other_budget_items), Decimal("0.00"))
     total_overhead_allocated = sum((item.amount for item in project.overheadbudgetitem_set.all()), Decimal("0.00"))
@@ -138,6 +167,7 @@ def details(request: HttpRequest, acronym: str):
         "allocated_sum": total_allocated,
         "remain_sum": remain_sum,
         "rebooked_allocated": rebooked_allocated,
+        "reporting": reporting,
         "rebooked_remain": rebooked_remain,
     }
 

@@ -12,6 +12,7 @@ from .models import (
     OverheadBudgetItemShare,
     Project,
     ProjectMilestone,
+    ReportingPeriod,
     SAPFund,
     StaffBudgetItem,
     StaffBudgetItemEligibility,
@@ -52,12 +53,19 @@ class ProjectSAPFundInlineAdmin(admin.TabularInline):
     )
 
 
+class ReportingPeriodInlineAdmin(admin.TabularInline):
+    model = ReportingPeriod
+    extra = 0
+    fields = ("title", "start_date", "end_date")
+
+
 class ProjectAdmin(admin.ModelAdmin):
     inlines = [
         StaffBudgetItemInlineAdmin,
         OverheadBudgetItemInlineAdmin,
         OtherBudgetItemInlineAdmin,
         ProjectMilestoneInlineAdmin,
+        ReportingPeriodInlineAdmin,
         ProjectSAPFundInlineAdmin,
     ]
 

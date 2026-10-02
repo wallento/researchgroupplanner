@@ -25,6 +25,14 @@
             {% if rebooked_allocated is not None %}<div class="small text-muted">(Umbuchungen: €&nbsp;{{ rebooked_allocated }} allokiert{% if rebooked_remain is not None %}, €&nbsp;{{ rebooked_remain }} nicht allokiert{% endif %})</div>{% endif %}
         </td>
     </tr>
+    {% if reporting %}
+    <tr>
+        <th>Berichtszeiträume:</th>
+        <td>
+            {% for period in reporting.periods %}<div>{{ period.label }}</div>{% endfor %}
+        </td>
+    </tr>
+    {% endif %}
     {% if project.no_overhead %}
     <tr>
         <th>Overhead:</th>
@@ -90,6 +98,40 @@
     </tfoot>
 </table>
 
+{% if reporting %}
+<h2>Berichtszeiträume</h2>
+
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th scope="col">Posten</th>
+            {% for period in reporting.periods %}
+                <th scope="col">{% if period.title %}{{ period.title }}<br>{% endif %}<span class="fw-normal small">{{ period.start_date|date:"d.m.Y" }} – {{ period.end_date|date:"d.m.Y" }}</span></th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in reporting.rows %}
+            <tr>
+                <td>{{ row.title }}</td>
+                {% for amount, pm in row.cells %}
+                    <td>€&nbsp;{{ amount }}{% if row.staff %}<div class="small text-muted">{{ pm|floatformat:1 }}&nbsp;PM</div>{% endif %}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="fw-bold">
+            <th scope="row">Summe</th>
+            {% for amount, pm in reporting.totals %}
+                <td>€&nbsp;{{ amount }}<div class="small text-muted fw-normal">{{ pm|floatformat:1 }}&nbsp;PM</div></td>
+            {% endfor %}
+        </tr>
+    </tfoot>
+</table>
+<p class="text-muted small">Personalkosten in angebrochenen Monaten tagesanteilig; Sachmittel nach Buchungsdatum.</p>
+{% endif %}
+
 <h2 id="timeline">Staffing</h2>
 <link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
 <script src="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.js' %}"></script>
@@ -126,6 +168,17 @@
     .vis-item {
         font-size: 0.85rem;
         cursor: pointer;
+    }
+
+    .vis-item.vis-background.reporting-period {
+        background-color: rgba(111, 66, 193, 0.08);
+        border-left: 1px dashed rgba(111, 66, 193, 0.5);
+        border-right: 1px dashed rgba(111, 66, 193, 0.5);
+    }
+
+    .vis-item.vis-background.reporting-period .vis-item-content {
+        color: #6f42c1 !important;
+        font-size: 0.75rem;
     }
 
     .vis-labelset .vis-label a {
@@ -223,6 +276,17 @@
             title: '<strong>{{ assignment.employee|escapejs }}</strong><br>{{ assignment.category|escapejs }}{% if assignment.rebooking %}<br>Umbuchung (offen){% if assignment.rebooking_from %} von {{ assignment.rebooking_from|escapejs }}{% endif %}{% endif %}',
             start: gpBuildDate({{ assignment.start|date:"Y" }}, {{ assignment.start|date:"n" }}, {{ assignment.start|date:"j" }}),
             end: gpBuildDate({{ assignment.end|date:"Y" }}, {{ assignment.end|date:"n" }}, {{ assignment.end|date:"j" }})
+        });
+{% endfor %}
+
+{% for period in reporting.periods %}
+        items.push({
+            id: 'reporting_period_{{ period.id }}',
+            content: '{{ period.title|default:"Berichtszeitraum"|escapejs }}',
+            start: gpBuildDate({{ period.start_date|date:"Y" }}, {{ period.start_date|date:"n" }}, {{ period.start_date|date:"j" }}),
+            end: gpBuildDate({{ period.end_date|date:"Y" }}, {{ period.end_date|date:"n" }}, {{ period.end_date|date:"j" }} + 1),
+            type: 'background',
+            className: 'reporting-period'
         });
 {% endfor %}
 

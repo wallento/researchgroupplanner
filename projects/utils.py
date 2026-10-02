@@ -141,3 +141,30 @@ def budget_usage_percent(used: Decimal, budget: Decimal | None) -> Decimal | Non
     if not budget:
         return None
     return (used * 100 / budget).quantize(Decimal("0.1"))
+
+
+def amount_in_period(months: dict, start, end) -> Decimal:
+    """Share of monthly amounts ({"YYYY-MM": amount}) within a period, prorated by days for partial months."""
+    from calendar import monthrange
+    from datetime import date
+
+    total = Decimal("0")
+    for key, amount in months.items():
+        month_start = date.fromisoformat(f"{key}-01")
+        days = monthrange(month_start.year, month_start.month)[1]
+        overlap = (min(end, month_start.replace(day=days)) - max(start, month_start)).days + 1
+        if overlap > 0:
+            total += Decimal(amount) * Decimal(overlap) / Decimal(days)
+    return total.quantize(Decimal("0.01"))
+
+
+def person_months_in_period(allocation: StaffFundingAllocation, start, end) -> Decimal:
+    """Person months of an allocation within a period."""
+    allocation_end = allocation.end_date or allocation.employment.end_date
+    clipped = StaffFundingAllocation(
+        employment=allocation.employment, percentage=allocation.percentage,
+        start_date=max(allocation.start_date, start), end_date=min(allocation_end, end),
+    )
+    if clipped.start_date > clipped.end_date:
+        return Decimal("0")
+    return sum(get_allocation_person_months(clipped).values(), Decimal("0"))

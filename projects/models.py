@@ -51,6 +51,33 @@ class ProjectMilestone(models.Model):
         return f"{self.project.acronym} - {self.title} ({self.date})"
 
 
+class ReportingPeriod(models.Model):
+    """Additional reporting period (Berichtszeitraum) of a project."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="reporting_periods")
+    title = models.CharField("Bezeichnung", max_length=200, blank=True)
+    start_date = models.DateField("Beginn")
+    end_date = models.DateField("Ende")
+
+    class Meta:
+        ordering = ["start_date"]
+        verbose_name = "Berichtszeitraum"
+        verbose_name_plural = "Berichtszeiträume"
+
+    def __str__(self):
+        return f"{self.project.acronym} – {self.label}"
+
+    @property
+    def label(self):
+        dates = f"{self.start_date:%d.%m.%Y} – {self.end_date:%d.%m.%Y}"
+        return f"{self.title} ({dates})" if self.title else dates
+
+    def clean(self):
+        super().clean()
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValidationError("Das Ende darf nicht vor dem Beginn liegen.")
+
+
 class Institute(models.Model):
     name = models.CharField(max_length=200, unique=True)
     short_name = models.CharField(max_length=50, unique=True)
