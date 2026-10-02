@@ -234,3 +234,19 @@ class StaffPlanningContinuityTests(ReconciliationTestBase):
         employment.refresh_from_db()
         self.assertEqual(employment.end_date, date(2026, 6, 30))
         self.assertEqual(member.employment_set.count(), 1)
+
+    def test_taking_over_again_does_not_duplicate_allocations(self):
+        from sap_integration.transform import create_staff_planning
+
+        member = StaffMember.objects.create(first_name="Karl", last_name="Kontinuierlich")
+        employment = Employment.objects.create(staff_member=member, start_date=date(2026, 1, 1),
+                                               end_date=date(2026, 6, 30), percentage=Decimal("100"))
+        position = self.position([["2026-01-01", "2026-06-30"]])
+        kwargs = dict(budget_item=self.staff_item, category="researcher", percentage=Decimal("100"),
+                      staff_member=member, employment=employment, create_salaries=False)
+
+        create_staff_planning(position, **kwargs)
+        _, allocations = create_staff_planning(position, **kwargs)
+
+        self.assertEqual(employment.stafffundingallocation_set.count(), 1)
+        self.assertEqual(allocations[0].sap_reference, "4777777")

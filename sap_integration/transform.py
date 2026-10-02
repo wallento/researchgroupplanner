@@ -74,6 +74,13 @@ def create_staff_planning(
                 category=category,
             )
         previous = target_employment
+        existing = _matching_allocation(target_employment, budget_item, start, end)
+        if existing is not None:
+            # Taken over again (e.g. "Weitere Zuordnung anlegen"): reuse instead of duplicating.
+            existing.sap_reference = add_reference(existing.sap_reference, position.reference)
+            existing.save(update_fields=["sap_reference"])
+            allocations.append(existing)
+            continue
         allocations.append(
             StaffFundingAllocation.objects.create(
                 employment=target_employment,
@@ -90,6 +97,14 @@ def create_staff_planning(
         for allocation in allocations:
             apply_monthly_salaries(allocation, costs)
     return staff_member, allocations
+
+
+def _matching_allocation(employment, budget_item, start, end):
+    """Allocation of the employment on the same budget for exactly this period, if any."""
+    for allocation in employment.stafffundingallocation_set.filter(budget_item=budget_item, start_date=start):
+        if (allocation.end_date or employment.end_date) == end:
+            return allocation
+    return None
 
 
 def projected_monthly_costs(position):
