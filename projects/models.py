@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from decimal import Decimal
 
 EmploymentCategories = {
+    'professor': 'Professoren',
     'student': 'Studentische Hilfskraft',
     'undergrad': 'Nicht-Wissenschaftliche Mitarbeiter',
     'researcher': 'Wissenschaftliche Mitarbeiter',
