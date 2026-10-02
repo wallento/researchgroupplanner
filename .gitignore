@@ -17,3 +17,5 @@ branding/*
 sap_data/
 .DS_Store
 db.sqlite3.bak-*
+*.sqlite
+*.sqlite3
