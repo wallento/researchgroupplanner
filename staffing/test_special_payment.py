@@ -96,3 +96,34 @@ class SpecialPaymentTests(TestCase):
 
         self.assertRedirects(response, reverse("staffing:details", args=[self.member.id]))
         self.assertEqual(get_salaries_by_month(employment)["2026-04"], Decimal("6087.27"))
+
+    def test_estimate_view_sets_missing_pay_grade(self):
+        self.client.force_login(get_user_model().objects.create_user("user", password="x"))
+        employment = Employment.objects.create(
+            staff_member=self.member, start_date=date(2026, 1, 1), end_date=date(2026, 12, 31), percentage=Decimal("100"),
+        )
+
+        details = self.client.get(reverse("staffing:details", args=[self.member.id]))
+        self.assertContains(details, f'id="estimate-form-{employment.id}"')
+
+        self.client.post(reverse("staffing:estimate_salaries", args=[employment.id]), {
+            "salary_category": self.e13.id, "start_level": "1", "level_start_date": "2026-01-01", "from_month": "2026-01",
+        })
+
+        employment.refresh_from_db()
+        self.assertEqual((employment.salary_category, employment.start_level), (self.e13, 1))
+        self.assertEqual(get_salaries_by_month(employment)["2026-04"], Decimal("6087.27"))
+
+    def test_estimate_view_rejects_level_start_after_employment(self):
+        self.client.force_login(get_user_model().objects.create_user("user", password="x"))
+        employment = Employment.objects.create(
+            staff_member=self.member, start_date=date(2026, 1, 1), end_date=date(2026, 12, 31), percentage=Decimal("100"),
+        )
+
+        self.client.post(reverse("staffing:estimate_salaries", args=[employment.id]), {
+            "salary_category": self.e13.id, "start_level": "1", "level_start_date": "2026-03-01",
+        })
+
+        employment.refresh_from_db()
+        self.assertIsNone(employment.salary_category)
+        self.assertFalse(employment.employmentsalaries_set.exists())

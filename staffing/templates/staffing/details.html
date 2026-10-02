@@ -258,8 +258,50 @@
             <input type="month" id="estimate-from-{{ employment.id }}" name="from_month" value="{{ employment.estimate_from }}" class="form-control form-control-sm" style="width: 10rem;">
             <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">Gehälter schätzen</button>
           </form>
+        {% else %}
+          <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" data-bs-toggle="collapse"
+                  data-bs-target="#estimate-form-{{ employment.id }}">Gehälter schätzen</button>
         {% endif %}
       </div>
+      {% if not employment.can_estimate %}
+        <form method="post" action="{% url 'staffing:estimate_salaries' employment.id %}" id="estimate-form-{{ employment.id }}"
+              class="collapse border rounded p-3 mb-3"
+              onsubmit="return confirm('Entgeltgruppe und Stufe speichern und Gehälter ab dem gewählten Monat aus den Entgelttabellen schätzen? Bestehende Werte ab diesem Monat werden ersetzt.');">
+          {% csrf_token %}
+          <p class="small text-muted mb-2">Für die Schätzung fehlen Entgeltgruppe und Stufe; sie werden bei der Anstellung gespeichert.</p>
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-3">
+              <label class="form-label small" for="estimate-category-{{ employment.id }}">Entgeltgruppe</label>
+              <select name="salary_category" id="estimate-category-{{ employment.id }}" class="form-select form-select-sm" required>
+                <option value="">–</option>
+                {% for category in salary_categories %}
+                  <option value="{{ category.id }}"{% if category.id == employment.estimate_defaults.salary_category %} selected{% endif %}>{{ category }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small" for="estimate-level-{{ employment.id }}">Stufe bei Beginn</label>
+              <select name="start_level" id="estimate-level-{{ employment.id }}" class="form-select form-select-sm">
+                {% for level in levels %}
+                  <option value="{{ level }}"{% if level == employment.estimate_defaults.start_level %} selected{% endif %}>Stufe {{ level }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small" for="estimate-level-start-{{ employment.id }}">Stufenbeginn (fiktiv)</label>
+              <input type="date" name="level_start_date" id="estimate-level-start-{{ employment.id }}" class="form-control form-control-sm"
+                     value="{{ employment.estimate_defaults.level_start_date }}">
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small" for="estimate-month-{{ employment.id }}">ab</label>
+              <input type="month" name="from_month" id="estimate-month-{{ employment.id }}" class="form-control form-control-sm" value="{{ employment.estimate_from }}">
+            </div>
+            <div class="col-sm-2">
+              <button type="submit" class="btn btn-sm btn-primary w-100">Schätzen</button>
+            </div>
+          </div>
+        </form>
+      {% endif %}
       {% if employment.sap_mismatches %}
         <div class="alert alert-warning">
           In {{ employment.sap_mismatches|length }} Monat(en) weicht das geplante Gehalt vom SAP-Ist ab:

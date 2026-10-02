@@ -9,7 +9,9 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from projects.models import Project
-from staffing.models import Employment, Rebooking, StaffFundingAllocation, StaffMember
+from django.core.exceptions import ValidationError
+from django.utils.dateparse import parse_date
+from staffing.models import MAX_LEVEL, Employment, Rebooking, SalaryCategory, StaffFundingAllocation, StaffMember
 from staffing.models import complete_rebooking as apply_rebooking
 from django.http import HttpRequest
 from django.utils import timezone
@@ -86,6 +88,7 @@ def details(request: HttpRequest, staff_id: int):
         second.id: {"previous": first, "ok": ok, "reason": reason}
         for first, second, ok, reason in employment_merge_candidates(employments)
     }
+    person_defaults = level_defaults(staff_member)
     allocation_timeline = []
     for employment in employments:
         employment.merge_hint = merge_hints.get(employment.id)
@@ -101,6 +104,17 @@ def details(request: HttpRequest, staff_id: int):
         employment.sap_mismatches = get_sap_salary_mismatches(employment.salaries_by_month, sap_actuals)
         employment.sap_correction_links = get_sap_correction_links(sap_actuals, employment.sap_mismatches)
         employment.can_estimate = bool(employment.salary_category_id and employment.start_level)
+        if not employment.can_estimate:
+            # Prefill pay grade and level for the estimate from the person's other employments.
+            defaults = person_defaults or {}
+            employment.estimate_defaults = {
+                "salary_category": employment.salary_category_id or defaults.get("salary_category"),
+                "start_level": defaults.get("start_level") or 1,
+                "level_start_date": min(
+                    date.fromisoformat(defaults["level_start_date"]) if defaults.get("level_start_date") else employment.start_date,
+                    employment.start_date,
+                ).isoformat(),
+            }
         employment.estimate_from = _estimate_from(employment, sap_actuals)
         mismatch_months = {mismatch["month"] for mismatch in employment.sap_mismatches}
         employment.salary_rows = [
@@ -112,6 +126,8 @@ def details(request: HttpRequest, staff_id: int):
         "staff_member": staff_member,
         "employments": employments,
         "allocation_timeline": allocation_timeline,
+        "salary_categories": SalaryCategory.objects.all(),
+        "levels": range(1, MAX_LEVEL + 1),
     })
 
 
@@ -251,6 +267,17 @@ def _estimate_from(employment, sap_actuals):
 def estimate_salaries(request: HttpRequest, employment_id: int):
     employment = get_object_or_404(Employment.objects.select_related("staff_member", "salary_category"), id=employment_id)
     from_month = request.POST.get("from_month") or None
+    if request.POST.get("salary_category"):
+        # Pay grade and level entered together with the estimate are stored on the employment.
+        employment.salary_category = get_object_or_404(SalaryCategory, id=request.POST["salary_category"])
+        employment.start_level = int(request.POST.get("start_level") or 1)
+        employment.level_start_date = parse_date(request.POST.get("level_start_date") or "") or employment.start_date
+        try:
+            employment.full_clean()
+        except ValidationError as error:
+            messages.error(request, "Gehälter nicht geschätzt: " + " ".join(error.messages))
+            return redirect("staffing:details", staff_id=employment.staff_member_id)
+        employment.save(update_fields=["salary_category", "start_level", "level_start_date"])
     if not (employment.salary_category_id and employment.start_level):
         messages.error(request, "Für die Schätzung bitte Entgeltgruppe und Stufe bei der Anstellung hinterlegen.")
     else:
