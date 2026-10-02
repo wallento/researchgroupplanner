@@ -19,6 +19,7 @@ from .utils import (
     amount_in_period,
     get_allocation_person_months,
     person_months_in_period,
+    project_budget_overview,
     get_allocations_salary_sum_of_year,
     get_table_allocations,
     get_timeline_allocations,
@@ -37,9 +38,12 @@ def index(request: HttpRequest):
         | Q(extension_planning_date__isnull=True, end_date__lt=today)
     ).order_by("start_date", "acronym")
 
+    projects, project_totals = project_budget_overview(running_projects)
     return render(request, "projects/index.html", {
         "running_projects": running_projects,
         "completed_projects": completed_projects,
+        "projects": projects,
+        "project_totals": project_totals,
     })
 
 

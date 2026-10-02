@@ -4,7 +4,10 @@
 {% block heading %}Projekte{% endblock %}
 
 {% block content %}
-<h2 class="mt-3">Laufende Projekte</h2>
+<h2 class="mt-3">Laufende und geplante Projekte</h2>
+{% include "projects/_budget_overview_table.html" %}
+
+<h2 class="mt-4">Laufende Projekte</h2>
 <ul>
 {% for project in running_projects %}
     <li>

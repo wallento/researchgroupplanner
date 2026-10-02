@@ -178,3 +178,67 @@ def person_months_in_period(allocation: StaffFundingAllocation, start, end) -> D
     if clipped.start_date > clipped.end_date:
         return Decimal("0")
     return sum(get_allocation_person_months(clipped).values(), Decimal("0"))
+
+
+def project_budget_overview(projects):
+    """Budget usage per project and cost category (without overhead) plus totals.
+
+    Returns (projects, totals); projects get used/usage attributes, also on
+    their staff and other budget items, including the effect of open Umbuchungen.
+    """
+    from staffing.utils import rebooking_cost_deltas
+
+    project_totals = {key: Decimal("0.00") for key in (
+        "budget", "used", "staff", "staff_used", "other", "other_used", "overhead", "overhead_available",
+    )}
+    projects = list(projects.prefetch_related("staffbudgetitem_set", "otherbudgetitem_set", "overheadbudgetitem_set"))
+    rebooking_deltas = rebooking_cost_deltas()
+    project_totals["rebooking_delta"] = Decimal("0.00")
+    for project in projects:
+        # Budget usage excludes overhead on both sides.
+        overhead = sum((item.amount for item in project.overheadbudgetitem_set.all()), Decimal("0.00"))
+        project.usage_budget = project.budget_total - overhead if project.budget_total is not None else None
+        project.rebooking_delta = Decimal("0.00")
+        for budget in project.staffbudgetitem_set.all():
+            budget.used = get_staff_budget_item_used(budget)
+            budget.usage_percent = budget_usage_percent(budget.used, budget.amount)
+            delta = rebooking_deltas.get(budget.id)
+            if delta:
+                budget.rebooked_used = budget.used + delta
+                budget.rebooked_percent = budget_usage_percent(budget.rebooked_used, budget.amount)
+                project.rebooking_delta += delta
+            project_totals["staff"] += budget.amount
+            project_totals["staff_used"] += budget.used
+        for budget in project.otherbudgetitem_set.all():
+            budget.used = get_other_budget_item_used(budget)
+            budget.usage_percent = budget_usage_percent(budget.used, budget.amount)
+            project_totals["other"] += budget.amount
+            project_totals["other_used"] += budget.used
+        project.used_budget = sum(
+            (b.used for b in [*project.staffbudgetitem_set.all(), *project.otherbudgetitem_set.all()]),
+            Decimal("0.00"),
+        )
+        project.usage_percent = budget_usage_percent(project.used_budget, project.usage_budget)
+        if project.rebooking_delta:
+            project.rebooked_used = project.used_budget + project.rebooking_delta
+            project.rebooked_percent = budget_usage_percent(project.rebooked_used, project.usage_budget)
+            project_totals["rebooking_delta"] += project.rebooking_delta
+        project_totals["budget"] += project.usage_budget or Decimal("0.00")
+        project_totals["used"] += project.used_budget
+        for budget in project.overheadbudgetitem_set.all():
+            project_totals["overhead"] += budget.amount
+            project_totals["overhead_available"] += budget.available_amount()
+
+    project_totals["usage_percent"] = budget_usage_percent(project_totals["used"], project_totals["budget"])
+    project_totals["staff_percent"] = budget_usage_percent(project_totals["staff_used"], project_totals["staff"])
+    # Shown whenever a listed budget is affected, even if the moves cancel out in the total.
+    if any(getattr(project, "rebooked_used", None) is not None for project in projects):
+        delta = project_totals["rebooking_delta"]
+        project_totals["rebooked_used"] = project_totals["used"] + delta
+        project_totals["rebooked_percent"] = budget_usage_percent(project_totals["rebooked_used"], project_totals["budget"])
+        project_totals["staff_rebooked_used"] = project_totals["staff_used"] + delta
+        project_totals["staff_rebooked_percent"] = budget_usage_percent(
+            project_totals["staff_rebooked_used"], project_totals["staff"],
+        )
+    project_totals["other_percent"] = budget_usage_percent(project_totals["other_used"], project_totals["other"])
+    return projects, project_totals

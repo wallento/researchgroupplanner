@@ -12,7 +12,6 @@ from staffing.utils import (
     get_sap_correction_links,
     employment_merge_candidates,
     get_sap_salary_mismatches,
-    rebooking_cost_deltas,
 )
 from django.conf import settings
 from django.contrib import messages
@@ -29,10 +28,8 @@ from django.views.decorators.http import require_POST
 from django.db.models import Sum
 
 from projects.utils import (
-    budget_usage_percent,
+    project_budget_overview,
     calculate_salary_for_allocation,
-    get_other_budget_item_used,
-    get_staff_budget_item_used,
 )
 from sap_integration.cache import SAPCacheError
 from sap_integration.salary_sync import (
@@ -1202,59 +1199,7 @@ def main(request):
                 'title': milestone.title,
             })
 
-    project_totals = {key: Decimal("0.00") for key in (
-        "budget", "used", "staff", "staff_used", "other", "other_used", "overhead", "overhead_available",
-    )}
-    projects = list(projects.prefetch_related("staffbudgetitem_set", "otherbudgetitem_set", "overheadbudgetitem_set"))
-    rebooking_deltas = rebooking_cost_deltas()
-    project_totals["rebooking_delta"] = Decimal("0.00")
-    for project in projects:
-        # Budget usage excludes overhead on both sides.
-        overhead = sum((item.amount for item in project.overheadbudgetitem_set.all()), Decimal("0.00"))
-        project.usage_budget = project.budget_total - overhead if project.budget_total is not None else None
-        project.rebooking_delta = Decimal("0.00")
-        for budget in project.staffbudgetitem_set.all():
-            budget.used = get_staff_budget_item_used(budget)
-            budget.usage_percent = budget_usage_percent(budget.used, budget.amount)
-            delta = rebooking_deltas.get(budget.id)
-            if delta:
-                budget.rebooked_used = budget.used + delta
-                budget.rebooked_percent = budget_usage_percent(budget.rebooked_used, budget.amount)
-                project.rebooking_delta += delta
-            project_totals["staff"] += budget.amount
-            project_totals["staff_used"] += budget.used
-        for budget in project.otherbudgetitem_set.all():
-            budget.used = get_other_budget_item_used(budget)
-            budget.usage_percent = budget_usage_percent(budget.used, budget.amount)
-            project_totals["other"] += budget.amount
-            project_totals["other_used"] += budget.used
-        project.used_budget = sum(
-            (b.used for b in [*project.staffbudgetitem_set.all(), *project.otherbudgetitem_set.all()]),
-            Decimal("0.00"),
-        )
-        project.usage_percent = budget_usage_percent(project.used_budget, project.usage_budget)
-        if project.rebooking_delta:
-            project.rebooked_used = project.used_budget + project.rebooking_delta
-            project.rebooked_percent = budget_usage_percent(project.rebooked_used, project.usage_budget)
-            project_totals["rebooking_delta"] += project.rebooking_delta
-        project_totals["budget"] += project.usage_budget or Decimal("0.00")
-        project_totals["used"] += project.used_budget
-        for budget in project.overheadbudgetitem_set.all():
-            project_totals["overhead"] += budget.amount
-            project_totals["overhead_available"] += budget.available_amount()
-
-    project_totals["usage_percent"] = budget_usage_percent(project_totals["used"], project_totals["budget"])
-    project_totals["staff_percent"] = budget_usage_percent(project_totals["staff_used"], project_totals["staff"])
-    # Shown whenever a listed budget is affected, even if the moves cancel out in the total.
-    if any(getattr(project, "rebooked_used", None) is not None for project in projects):
-        delta = project_totals["rebooking_delta"]
-        project_totals["rebooked_used"] = project_totals["used"] + delta
-        project_totals["rebooked_percent"] = budget_usage_percent(project_totals["rebooked_used"], project_totals["budget"])
-        project_totals["staff_rebooked_used"] = project_totals["staff_used"] + delta
-        project_totals["staff_rebooked_percent"] = budget_usage_percent(
-            project_totals["staff_rebooked_used"], project_totals["staff"],
-        )
-    project_totals["other_percent"] = budget_usage_percent(project_totals["other_used"], project_totals["other"])
+    projects, project_totals = project_budget_overview(projects)
 
     return render(request, "controlling/main.html", {
         "projects": projects,
