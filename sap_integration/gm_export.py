@@ -298,11 +298,14 @@ def _build_position(reference, rows):
 def _classify(rows, cost_type, texts):
     budget_groups = {_budget_group(row) for row in rows} - {""}
     all_cost_types = {_text(row["E/A-Art"]) for row in rows}
+    # Travel (RKE/RKA) is sometimes booked on personnel cost types; the text decides.
+    if any(TRAVEL_TEXT_RE.match(text) for text in texts):
+        return SAPPositionKind.TRAVEL
     if STAFF_BUDGET_GROUP in budget_groups or all_cost_types & STAFF_COST_TYPES:
         return SAPPositionKind.STAFF
     if budget_groups == {INCOME_BUDGET_GROUP} or all_cost_types <= INCOME_COST_TYPES:
         return SAPPositionKind.INCOME
-    if cost_type in TRAVEL_COST_TYPES or any(TRAVEL_TEXT_RE.match(text) for text in texts):
+    if cost_type in TRAVEL_COST_TYPES:
         return SAPPositionKind.TRAVEL
     return SAPPositionKind.OTHER
 

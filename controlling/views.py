@@ -565,7 +565,9 @@ def warnings(request):
             })
 
     if settings.SAP_GM_IMPORT_ENABLED:
-        warnings_list.extend(_sap_reconciliation_warnings())
+        reconciliations = _sap_reconciliations()
+        warnings_list.extend(_sap_reconciliation_warnings(reconciliations))
+        warnings_list.extend(_sap_obligo_warnings(reconciliations))
         warnings_list.extend(_sap_actual_salary_warnings())
 
     if settings.SAP_ENABLED:
@@ -701,13 +703,24 @@ def _sap_actual_salary_warnings():
     return result_warnings
 
 
-def _sap_reconciliation_warnings():
-    from sap_integration.crosscheck import Status, build_reconciliation
+def _sap_reconciliations():
+    """[(fund, reconciliation)] for all project funds with an imported export."""
+    from sap_integration.crosscheck import build_reconciliation
+
+    result = []
+    for fund in SAPFund.objects.filter(project__isnull=False, sap_imports__isnull=False).select_related("project").distinct():
+        reconciliation = build_reconciliation(fund)
+        if reconciliation is not None:
+            result.append((fund, reconciliation))
+    return result
+
+
+def _sap_reconciliation_warnings(reconciliations):
+    from sap_integration.crosscheck import Status
 
     result_warnings = []
-    for fund in SAPFund.objects.filter(project__isnull=False, sap_imports__isnull=False).select_related("project").distinct():
-        result = build_reconciliation(fund)
-        if result is None or not result.open_checks:
+    for fund, result in reconciliations:
+        if not result.open_checks:
             continue
         missing = sum(1 for check in result.open_checks if check.status == Status.MISSING)
         mismatch = len(result.open_checks) - missing
@@ -721,6 +734,36 @@ def _sap_reconciliation_warnings():
             "link": reverse("sap_integration:reconciliation", args=[fund.id]),
         })
     return result_warnings
+
+
+def _sap_obligo_warnings(reconciliations):
+    """Open staff Obligo not reflected in the planning, one entry per person."""
+    people = {}
+    for fund, result in reconciliations:
+        for check in result.checks:
+            if not check.obligo_issues or check.ignored:
+                continue
+            name = str(check.staff_member) if check.staff_member else check.position.person_name or check.position.title
+            entry = people.setdefault(name, {"staff_member": check.staff_member, "details": [], "links": [], "amount": Decimal("0.00")})
+            for issue in check.obligo_issues:
+                entry["details"].append(f"{fund.project.acronym} (SAP-Position {check.position.reference}): {issue['text']}")
+                entry["amount"] += abs(issue["amount"])
+            entry["links"].append({
+                "label": f"{fund.project.acronym} – SAP-Position {check.position.reference}",
+                "url": reverse("sap_integration:position_detail", args=[fund.id, check.position.id]),
+            })
+    return [
+        {
+            "severity": "warning",
+            "title": f"SAP-Obligo nicht in Planung: {name}",
+            "details": entry["details"],
+            "link": (
+                f"/staffing/details/{entry['staff_member'].id}/" if entry["staff_member"] else entry["links"][0]["url"]
+            ),
+            "correction_links": entry["links"],
+        }
+        for name, entry in sorted(people.items())
+    ]
 
 
 @login_required

@@ -250,3 +250,66 @@ class StaffPlanningContinuityTests(ReconciliationTestBase):
 
         self.assertEqual(employment.stafffundingallocation_set.count(), 1)
         self.assertEqual(allocations[0].sap_reference, "4777777")
+
+
+class StaffObligoTests(ReconciliationTestBase):
+    def check_for(self, periods, actuals, commitment, planned=None, findings=None):
+        from sap_integration.crosscheck import PositionCheck
+
+        position = SAPPosition(
+            sap_import=self.sap_import, reference="4888888", kind=SAPPositionKind.STAFF, cost_type="7221",
+            contract_periods=periods, monthly_actuals=actuals, commitment=Decimal(commitment),
+        )
+        return PositionCheck(position=position, planned_months=planned or {}, findings=list(findings or []))
+
+    def test_obligo_after_contract_end_is_reported(self):
+        from sap_integration.crosscheck import _compare_obligo
+
+        check = self.check_for([["2026-01-01", "2026-02-28"]], {"2026-01": "3000", "2026-02": "3000"}, "3000")
+        _compare_obligo(check, [])
+
+        self.assertIn("Obligo nach Vertragsende nicht ausgebucht: 3,000.00 €", check.findings[0])
+        self.assertEqual(check.obligo_issues[0]["amount"], Decimal("3000"))
+
+    def test_unplanned_contract_months_are_estimated(self):
+        from sap_integration.crosscheck import _compare_obligo
+
+        check = self.check_for(
+            [["2026-01-01", "2026-06-30"]], {"2026-01": "3000", "2026-02": "3000"}, "12000",
+            findings=["SAP-Vertrag nicht geplant: 2026-05 – 2026-06"],
+        )
+        _compare_obligo(check, ["2026-05", "2026-06"])
+
+        self.assertEqual(len(check.findings), 1)
+        self.assertIn("Vertrag in SAP reserviert, nicht geplant: 2026-05 – 2026-06 (≈ 6,000.00 €", check.findings[0])
+
+    def test_difference_to_planned_remaining_cost(self):
+        from sap_integration.crosscheck import _compare_obligo
+
+        planned = {"2026-03": Decimal("1000"), "2026-04": Decimal("1000")}
+        check = self.check_for([["2026-01-01", "2026-04-30"]], {"2026-01": "3000", "2026-02": "3000"}, "6000", planned)
+        _compare_obligo(check, [])
+        self.assertIn("weicht von den geplanten Restkosten", check.findings[0])
+
+        close = self.check_for([["2026-01-01", "2026-04-30"]], {"2026-01": "3000", "2026-02": "3000"}, "2500", planned)
+        _compare_obligo(close, [])
+        self.assertEqual(close.findings, [])
+
+    def test_travel_on_personnel_cost_type_is_travel(self):
+        from sap_integration.gm_export import _classify
+
+        rows = [{"E/A-Art": "PERSONALKOSTEN", "Finanzposition": ""}]
+        self.assertEqual(_classify(rows, "PERSONALKOSTEN", ["RKE Seoul 13.-21.11.25", ""]), SAPPositionKind.TRAVEL)
+        self.assertEqual(_classify(rows, "PERSONALKOSTEN", ["AV, Muster, Erika", ""]), SAPPositionKind.STAFF)
+
+
+@override_settings(SAP_ENABLED=False, SAP_GM_IMPORT_ENABLED=True, STORAGES=STATIC_STORAGE)
+class ObligoWarningTests(ReconciliationTestBase):
+    def test_missing_staff_position_with_obligo_is_warned(self):
+        self.client.force_login(get_user_model().objects.create_user("user", password="x"))
+
+        warnings = self.client.get(reverse("warnings")).context["warnings_list"]
+
+        entry = next(w for w in warnings if w["title"].startswith("SAP-Obligo nicht in Planung"))
+        self.assertIn("Position fehlt in der Planung", entry["details"][0])
+        self.assertTrue(entry["correction_links"][0]["url"].startswith("/"))

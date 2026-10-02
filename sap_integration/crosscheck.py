@@ -19,7 +19,10 @@ from staffing.models import StaffFundingAllocation, StaffMember
 
 SALARY_TOLERANCE = Decimal("1.00")
 AMOUNT_TOLERANCE = Decimal("0.01")
-FORECAST_TOLERANCE = Decimal("50.00")
+OBLIGO_TOLERANCE = Decimal("1.00")
+# Obligo and planned remaining cost differ notably above this amount or share.
+OBLIGO_DIFFERENCE = Decimal("1000.00")
+OBLIGO_DIFFERENCE_SHARE = Decimal("0.10")
 FULL_TIME_WEEKLY_HOURS = Decimal("40")
 STUDENT_CONTRACT_TYPES = {"SHK", "WHK", "TUT"}
 
@@ -58,6 +61,8 @@ class PositionCheck:
     ignored: object = None
     planned_months: dict = field(default_factory=dict)
     salary_mismatch_months: list = field(default_factory=list)
+    # Open staff Obligo not reflected in the planning: [{"text", "amount"}].
+    obligo_issues: list = field(default_factory=list)
 
     @property
     def status_label(self):
@@ -211,6 +216,11 @@ def _check_staff(check, allocations, staff_members, staff_budget_items, mappings
         return
     if not check.allocations:
         check.status = Status.MISSING
+        if position.commitment > OBLIGO_TOLERANCE:
+            check.obligo_issues.append({
+                "text": f"Position fehlt in der Planung, offenes Obligo {position.commitment:,.2f} €.",
+                "amount": position.commitment,
+            })
         if not position.person_name:
             check.findings.append("Keine Person erkennbar – bitte manuell verknüpfen oder ignorieren.")
         elif check.staff_member is None:
@@ -226,10 +236,10 @@ def _check_staff(check, allocations, staff_members, staff_budget_items, mappings
         for month, amount in calculate_salary_for_allocation(allocation).months.items():
             check.planned_months[month] = check.planned_months.get(month, Decimal("0.00")) + Decimal(amount)
 
-    _compare_periods(check)
+    unplanned_months = _compare_periods(check)
     _compare_percentage(check)
     _compare_salaries(check)
-    _compare_forecast(check)
+    _compare_obligo(check, unplanned_months)
     check.status = Status.MISMATCH if check.findings else Status.OK
 
 
@@ -249,6 +259,7 @@ def _compare_periods(check):
         check.findings.append(f"SAP-Vertrag nicht geplant: {_format_month_ranges(missing)}")
     if extra:
         check.findings.append(f"Geplant ohne SAP-Vertrag: {_format_month_ranges(extra)}")
+    return missing
 
 
 def _compare_percentage(check):
@@ -278,20 +289,61 @@ def _compare_salaries(check):
         check.findings.append(f"Gehaltsabweichung in {len(check.salary_mismatch_months)} Monat(en): {sample}")
 
 
-def _compare_forecast(check):
-    paid_months = sorted(check.position.monthly_actuals)
-    if not paid_months:
+def _compare_obligo(check, unplanned_months):
+    """Report open staff Obligo that the planning does not reflect.
+
+    - Obligo left after the contract is fully paid: the reservation was not
+      cleared in SAP (like travel reservations); it is not planned.
+    - Contract months reserved in SAP but not planned: estimated amount.
+    - Otherwise a clear difference between Obligo and planned remaining cost.
+    """
+    position = check.position
+    commitment = position.commitment
+    if commitment <= OBLIGO_TOLERANCE:
         return
-    last_paid = paid_months[-1]
-    planned_future = sum(
-        (amount for month, amount in check.planned_months.items() if month > last_paid),
-        Decimal("0.00"),
-    )
-    commitment = check.position.commitment
-    if abs(planned_future - commitment) > FORECAST_TOLERANCE:
-        check.notes.append(
-            f"Offenes Obligo {commitment:,.2f} €, geplante Restkosten nach {last_paid}: {planned_future:,.2f} €."
+    periods = contract_periods(position)
+    contract_end = max((end for _, end in periods), default=None)
+    paid_months = sorted(position.monthly_actuals)
+    last_paid = paid_months[-1] if paid_months else ""
+
+    if contract_end and last_paid and last_paid >= contract_end.strftime("%Y-%m"):
+        text = (
+            f"Obligo nach Vertragsende nicht ausgebucht: {commitment:,.2f} € – bitte in SAP ausbuchen lassen; "
+            "es wird nicht geplant."
         )
+        check.findings.append(text)
+        check.obligo_issues.append({"text": text, "amount": commitment})
+        return
+
+    future_unplanned = [month for month in unplanned_months if month > last_paid]
+    if future_unplanned:
+        rate = next((Decimal(position.monthly_actuals[m]) for m in reversed(paid_months)
+                     if Decimal(position.monthly_actuals[m]) > 0), None)
+        if rate is None:
+            unpaid = [m for start, end in periods for m in _months(start, end) if m > last_paid]
+            rate = commitment / len(unpaid) if unpaid else commitment
+        estimate = min(commitment, (rate * len(future_unplanned)).quantize(Decimal("0.01")))
+        if future_unplanned == unplanned_months:
+            # Replaces the generic period finding, which covers the same months.
+            check.findings.remove(f"SAP-Vertrag nicht geplant: {_format_month_ranges(unplanned_months)}")
+        text = (
+            f"Vertrag in SAP reserviert, nicht geplant: {_format_month_ranges(future_unplanned)} "
+            f"(≈ {estimate:,.2f} € von {commitment:,.2f} € Obligo)."
+        )
+        check.findings.append(text)
+        check.obligo_issues.append({"text": text, "amount": estimate})
+        return
+
+    planned_future = sum(
+        (amount for month, amount in check.planned_months.items() if month > last_paid), Decimal("0.00"),
+    )
+    if abs(planned_future - commitment) > max(OBLIGO_DIFFERENCE, commitment * OBLIGO_DIFFERENCE_SHARE):
+        text = (
+            f"Offenes Obligo {commitment:,.2f} € weicht von den geplanten Restkosten "
+            f"nach {last_paid or 'Beginn'} ab ({planned_future:,.2f} €)."
+        )
+        check.findings.append(text)
+        check.obligo_issues.append({"text": text, "amount": commitment - planned_future})
 
 
 def _check_other(check, transactions, mappings):
