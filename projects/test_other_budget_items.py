@@ -82,3 +82,21 @@ class OtherBudgetItemsPageTests(TestCase):
         url = reverse("sap_integration:position_detail", args=[fund.id, position.id])
         self.assertContains(response, f'<a href="{url}" title="Beleg im SAP-Abgleich öffnen">8000001</a>')
         self.assertContains(response, ", 9999999")
+
+    def test_sap_status_per_transaction(self):
+        from projects.models import SAPFund
+        from sap_integration.models import SAPImport, SAPPosition
+
+        fund = SAPFund.objects.create(fund_number="F-2", project=self.project)
+        sap_import = SAPImport.objects.create(fund=fund, file_name="export.xlsx")
+        SAPPosition.objects.create(sap_import=sap_import, reference="8000002", kind="travel", cost_type="7464",
+                                   actual=Decimal("400.00"))
+        self.conference.sap_id = "8000002"
+        self.conference.save()
+
+        response = self.client.get(reverse("projects:other_budget_items", args=["TEST"]))
+
+        transactions = response.context["budget_items"][0].transactions
+        self.assertEqual(transactions[0].sap_status[0], "Ist")
+        self.assertEqual(transactions[1].sap_status[0], "Plan")
+        self.assertEqual(response.context["budget_items"][0].actual, Decimal("400.00"))

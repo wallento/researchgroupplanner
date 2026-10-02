@@ -13,6 +13,7 @@
             <tr>
                 <th>Posten</th>
                 <th>Nutzung</th>
+                <th class="text-end">davon Ist</th>
                 <th class="text-end">Nicht allokiert</th>
             </tr>
         </thead>
@@ -21,6 +22,7 @@
                 <tr>
                     <td><a href="#budget-{{ item.id }}">{{ item.title }}</a></td>
                     <td>{% include "controlling/_budget_usage.html" with used=item.used budget=item.amount percent=item.usage_percent %}</td>
+                    <td class="text-end">€&nbsp;{{ item.actual }}</td>
                     <td class="text-end{% if item.remain < 0 %} text-danger{% endif %}">€&nbsp;{{ item.remain }}</td>
                 </tr>
             {% endfor %}
@@ -29,6 +31,7 @@
             <tr class="fw-bold">
                 <th scope="row">Summe</th>
                 <td>{% include "controlling/_budget_usage.html" with used=total_used budget=total_amount percent=total_percent %}</td>
+                <td class="text-end">€&nbsp;{{ total_actual }}</td>
                 <td class="text-end{% if total_remain < 0 %} text-danger{% endif %}">€&nbsp;{{ total_remain }}</td>
             </tr>
         </tfoot>
@@ -43,12 +46,13 @@
                     <th>Datum</th>
                     <th>Beschreibung</th>
                     <th>SAP-Referenz</th>
+                    <th>Status</th>
                     <th class="text-end">Betrag</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <th colspan="3">Budget</th>
+                    <th colspan="4">Budget</th>
                     <th class="text-end">€&nbsp;{{ item.amount }}</th>
                 </tr>
                 {% for transaction in item.transactions %}
@@ -72,19 +76,27 @@
                         <td>
                             {% for reference, url in transaction.sap_links %}{% if url %}<a href="{{ url }}" title="Beleg im SAP-Abgleich öffnen">{{ reference }}</a>{% else %}{{ reference }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
                         </td>
+                        <td class="text-nowrap">
+                            <span class="badge {{ transaction.sap_status.1 }}" title="{{ transaction.sap_status.2 }}">{{ transaction.sap_status.0 }}</span>
+                            {% if transaction.sap_status.0 == "Ist + offen" %}<div class="small text-muted">Ist €&nbsp;{{ transaction.sap_actual }}</div>{% endif %}
+                        </td>
                         <td class="text-end">€&nbsp;{{ transaction.amount }}</td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="4" class="text-muted">Keine Planungseinträge.</td></tr>
+                    <tr><td colspan="5" class="text-muted">Keine Planungseinträge.</td></tr>
                 {% endfor %}
             </tbody>
             <tfoot>
                 <tr class="fw-bold">
-                    <td colspan="3">Summe</td>
+                    <td colspan="4">Summe</td>
                     <td class="text-end">€&nbsp;{{ item.used }}</td>
                 </tr>
                 <tr>
-                    <td colspan="3">Nicht allokiert</td>
+                    <td colspan="4">davon Ist (in SAP bezahlt)</td>
+                    <td class="text-end">€&nbsp;{{ item.actual }}</td>
+                </tr>
+                <tr>
+                    <td colspan="4">Nicht allokiert</td>
                     <td class="text-end{% if item.remain < 0 %} text-danger{% endif %}">€&nbsp;{{ item.remain }}</td>
                 </tr>
             </tfoot>

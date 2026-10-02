@@ -231,25 +231,48 @@ def details(request: HttpRequest, acronym: str):
 
     return render(request, "projects/details.html", parameters)
 
-def _sap_position_urls(project):
-    """{SAP reference: reconciliation page} for the latest import of each of the project's funds."""
+def _sap_positions(project):
+    """{SAP reference: (reconciliation page, position)} for the latest import of each of the project's funds."""
     from sap_integration.models import SAPPosition
 
-    urls = {}
+    positions = {}
     for fund in project.sap_funds.all():
         sap_import = fund.sap_imports.order_by("-imported_at").first()
         if sap_import is None:
             continue
-        for position_id, reference in SAPPosition.objects.filter(sap_import=sap_import).values_list("id", "reference"):
-            urls.setdefault(reference, reverse("sap_integration:position_detail", args=[fund.id, position_id]))
-    return urls
+        for position in SAPPosition.objects.filter(sap_import=sap_import):
+            positions.setdefault(position.reference, (
+                reverse("sap_integration:position_detail", args=[fund.id, position.id]), position,
+            ))
+    return positions
+
+
+SAP_STATUS_LABELS = {
+    "ist": ("Ist", "text-bg-success", "In SAP bezahlt"),
+    "partial": ("Ist + offen", "text-bg-info", "Teilweise bezahlt, Bestellung noch offen"),
+    "obligo": ("Obligo", "text-bg-warning", "In SAP reserviert/bestellt, noch nicht bezahlt"),
+    "plan": ("Plan", "text-bg-light border", "Ohne SAP-Beleg"),
+}
+
+
+def _sap_status(linked_positions):
+    """(status key, paid actual) of a planning entry from its linked SAP positions."""
+    if not linked_positions:
+        return "plan", None
+    actual = sum((p.actual for p in linked_positions), Decimal("0.00"))
+    planned = sum((p.planned_amount for p in linked_positions), Decimal("0.00"))
+    if not actual:
+        return "obligo", actual
+    if planned - actual > Decimal("0.01"):
+        return "partial", actual
+    return "ist", actual
 
 
 def other_budget_items(request: HttpRequest, acronym: str):
     project = get_object_or_404(Project, acronym=acronym)
     years = {int(year) for year in project.get_years()}
 
-    position_urls = _sap_position_urls(project)
+    positions = _sap_positions(project)
 
     budget_items = list(project.otherbudgetitem_set.order_by("title"))
     for item in budget_items:
@@ -257,16 +280,20 @@ def other_budget_items(request: HttpRequest, acronym: str):
         for transaction in item.transactions:
             # Only bookings within the project years count, as on the details page.
             transaction.counts = transaction.date.year in years
-            transaction.sap_links = [
-                (reference, position_urls.get(reference)) for reference in sorted(references(transaction.sap_id))
-            ]
+            refs = sorted(references(transaction.sap_id))
+            transaction.sap_links = [(reference, positions.get(reference, (None,))[0]) for reference in refs]
+            status, transaction.sap_actual = _sap_status([positions[r][1] for r in refs if r in positions])
+            transaction.sap_status = SAP_STATUS_LABELS[status]
         item.used = sum((t.amount for t in item.transactions if t.counts), Decimal("0.00"))
+        item.actual = sum((t.sap_actual or Decimal("0.00") for t in item.transactions if t.counts), Decimal("0.00"))
         item.remain = item.amount - item.used
         item.usage_percent = budget_usage_percent(item.used, item.amount)
 
     total_amount = sum((item.amount for item in budget_items), Decimal("0.00"))
     total_used = sum((item.used for item in budget_items), Decimal("0.00"))
+    total_actual = sum((item.actual for item in budget_items), Decimal("0.00"))
     return render(request, "projects/other_budget_items.html", {
+        "total_actual": total_actual,
         "project": project,
         "budget_items": budget_items,
         "total_amount": total_amount,
