@@ -100,3 +100,13 @@ class OtherBudgetItemsPageTests(TestCase):
         self.assertEqual(transactions[0].sap_status[0], "Ist")
         self.assertEqual(transactions[1].sap_status[0], "Plan")
         self.assertEqual(response.context["budget_items"][0].actual, Decimal("400.00"))
+
+    def test_projects_page_lists_running_and_completed_projects(self):
+        Project.objects.create(acronym="OLDPROJ", start_date=date(2020, 1, 1), end_date=date(2021, 12, 31),
+                               budget_total=Decimal("1000"))
+
+        response = self.client.get(reverse("projects:index"))
+
+        self.assertEqual([p.acronym for p in response.context["completed_projects"]], ["OLDPROJ"])
+        self.assertIn("TEST", [p.acronym for p in response.context["projects"]])
+        self.assertContains(response, "Abgeschlossene Projekte")

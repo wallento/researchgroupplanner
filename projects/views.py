@@ -39,11 +39,12 @@ def index(request: HttpRequest):
     ).order_by("start_date", "acronym")
 
     projects, project_totals = project_budget_overview(running_projects)
+    completed, completed_totals = project_budget_overview(completed_projects)
     return render(request, "projects/index.html", {
-        "running_projects": running_projects,
-        "completed_projects": completed_projects,
         "projects": projects,
         "project_totals": project_totals,
+        "completed_projects": completed,
+        "completed_totals": completed_totals,
     })
 
 
