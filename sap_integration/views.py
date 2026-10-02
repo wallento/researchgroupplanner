@@ -1,4 +1,5 @@
 import tempfile
+from datetime import timedelta
 from collections import defaultdict
 from decimal import Decimal
 
@@ -433,6 +434,7 @@ def position_detail(request, fund_id, position_id):
 
     last_name, _, first_name = position.person_name.partition(", ")
     existing_employment = _overlapping_employment(check)
+    continued_employment = None if existing_employment else _preceding_employment(check)
     staff_form = StaffTransformForm(
         request.POST if request.POST.get("action") == "transform_staff" else None,
         project=project,
@@ -444,7 +446,7 @@ def position_detail(request, fund_id, position_id):
             "budget_item": check.budget_item,
             "category": planner_category(position),
             "percentage": expected_percentage(position) or 100,
-            "employment": existing_employment,
+            "employment": existing_employment or continued_employment,
             "create_salaries": existing_employment is None,
         },
     )
@@ -600,6 +602,15 @@ def _overlapping_employment(check):
         if any(employment.start_date <= end and start <= employment.end_date for start, end in periods):
             return employment
     return None
+
+
+def _preceding_employment(check):
+    """Employment of the person ending the day before the SAP contract starts; it is extended."""
+    periods = contract_periods(check.position)
+    if check.staff_member is None or not periods:
+        return None
+    first_start = min(start for start, _ in periods)
+    return check.staff_member.employment_set.filter(end_date=first_start - timedelta(days=1)).first()
 
 
 def _allocation_covers(allocation, month):

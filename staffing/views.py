@@ -18,6 +18,8 @@ from projects.models import EmploymentCategories
 from .forms import AllocationForm, PlanEmploymentForm, RebookingForm
 from .utils import (
     apply_tariff_salaries,
+    employment_merge_candidates,
+    merge_employments,
     get_salaries_by_month,
     get_sap_actuals_by_month,
     get_sap_correction_links,
@@ -78,9 +80,14 @@ def details(request: HttpRequest, staff_id: int):
         "stafffundingallocation_set__budget_item__project",
         "stafffundingallocation_set__landesstelle",
         "stafffundingallocation_set__annual_pool_budget__annual_pool",
-    ).all()
+    ).order_by("start_date")
+    merge_hints = {
+        second.id: {"previous": first, "ok": ok, "reason": reason}
+        for first, second, ok, reason in employment_merge_candidates(employments)
+    }
     allocation_timeline = []
     for employment in employments:
+        employment.merge_hint = merge_hints.get(employment.id)
         employment.salaries_by_month = get_salaries_by_month(employment)
         employment.allocations = employment.stafffundingallocation_set.all().order_by("start_date")
         for allocation in employment.allocations:
@@ -356,3 +363,19 @@ def rebookings(request: HttpRequest):
             "allocation__annual_pool_budget__annual_pool", "budget_item__project",
         ).order_by("start_date", "allocation__employment__staff_member__last_name"),
     })
+
+
+@require_POST
+def merge_employment(request: HttpRequest, first_id: int, second_id: int):
+    first = get_object_or_404(Employment.objects.select_related("staff_member"), id=first_id)
+    second = get_object_or_404(Employment, id=second_id)
+    try:
+        merge_employments(first, second)
+    except ValueError as error:
+        messages.error(request, f"Zusammenführen nicht möglich: {error}")
+    else:
+        messages.success(request, f"Anstellungen von {first.staff_member} zusammengeführt ({first.start_date:%d.%m.%Y} – {first.end_date:%d.%m.%Y}).")
+    next_url = request.POST.get("next") or ""
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("staffing:details", staff_id=first.staff_member_id)

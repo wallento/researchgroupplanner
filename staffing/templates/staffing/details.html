@@ -168,6 +168,21 @@
   </div>
 
     {% for employment in employments %}
+      {% if employment.merge_hint %}
+        <div class="alert {% if employment.merge_hint.ok %}alert-info{% else %}alert-light border{% endif %} d-flex justify-content-between align-items-center gap-3">
+          <span>
+            Schließt direkt an die vorherige Anstellung an ({{ employment.merge_hint.previous.start_date|date:"d.m.Y" }} – {{ employment.merge_hint.previous.end_date|date:"d.m.Y" }}).
+            {% if not employment.merge_hint.ok %}<br><span class="text-muted">Nicht zusammenführbar: {{ employment.merge_hint.reason }}</span>{% endif %}
+          </span>
+          {% if employment.merge_hint.ok %}
+            <form method="post" action="{% url 'staffing:merge_employments' employment.merge_hint.previous.id employment.id %}"
+                  onsubmit="return confirm('Anstellungen zusammenführen? Zuordnungen und Gehälter bleiben erhalten und werden der früheren Anstellung zugeordnet.');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-primary text-nowrap">Zusammenführen</button>
+            </form>
+          {% endif %}
+        </div>
+      {% endif %}
       <h3>{{ employment.get_category }}{% if employment.salary_category %}, {{ employment.salary_category }}{% endif %} ({{ employment.start_date }} - {{ employment.end_date }}, {{ employment.percentage }}%)
         {% if employment.status != "contract" %}<span class="badge text-bg-info align-middle fs-6">{{ employment.get_status_display }}</span>{% endif %}
       </h3>

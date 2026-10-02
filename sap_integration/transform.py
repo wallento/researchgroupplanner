@@ -1,7 +1,7 @@
 """Actions that transfer SAP positions into the planning."""
 
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
@@ -38,8 +38,10 @@ def create_staff_planning(
 ):
     """Create employment(s), allocations and optionally salaries for a staff position.
 
-    One allocation is created per SAP contract period. Without an existing
-    employment, each period becomes its own employment.
+    One allocation is created per SAP contract period. A given employment is
+    extended for periods that continue it directly. Without one, each period
+    becomes an employment, except that periods continuing the previous one
+    extend it, so a continuous contract stays a single employment.
     """
     if staff_member is None:
         staff_member = StaffMember.objects.create(first_name=first_name, last_name=last_name)
@@ -48,13 +50,21 @@ def create_staff_planning(
 
     periods = contract_periods(position) or [(position.first_date, position.last_date)]
     allocations = []
-    for start, end in periods:
+    previous = None
+    for start, end in sorted(periods):
         if employment is not None:
+            if end > employment.end_date and start <= employment.end_date + timedelta(days=1):
+                employment.end_date = end
+                employment.save(update_fields=["end_date"])
             start = max(start, employment.start_date)
             end = min(end, employment.end_date)
             if start > end:
                 continue
             target_employment = employment
+        elif previous is not None and previous.end_date + timedelta(days=1) == start:
+            previous.end_date = end
+            previous.save(update_fields=["end_date"])
+            target_employment = previous
         else:
             target_employment = Employment.objects.create(
                 staff_member=staff_member,
@@ -63,6 +73,7 @@ def create_staff_planning(
                 percentage=percentage,
                 category=category,
             )
+        previous = target_employment
         allocations.append(
             StaffFundingAllocation.objects.create(
                 employment=target_employment,

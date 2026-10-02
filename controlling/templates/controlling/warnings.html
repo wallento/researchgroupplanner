@@ -36,6 +36,13 @@
                         {% for correction in warning.correction_links %}
                             <span class="mx-1">·</span><a href="{{ correction.url }}">Korrigieren: {{ correction.label }}</a>
                         {% endfor %}
+                        {% if warning.merge_employment_ids %}
+                            <form method="post" action="{% url 'staffing:merge_employments' warning.merge_employment_ids.0 warning.merge_employment_ids.1 %}" class="d-inline ms-2" onsubmit="return confirm('Anstellungen zusammenführen? Zuordnungen und Gehälter bleiben erhalten.');">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{% url 'warnings' %}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Zusammenführen</button>
+                            </form>
+                        {% endif %}
                         {% if warning.merge_salary_ids %}
                             <form method="post" action="{% url 'merge_salary_overlap' warning.merge_salary_ids.0 warning.merge_salary_ids.1 %}" class="d-inline ms-2" onsubmit="return confirm('Überlappende Gehaltssätze zusammenführen? Die betroffenen Einträge werden ersetzt.');">
                                 {% csrf_token %}

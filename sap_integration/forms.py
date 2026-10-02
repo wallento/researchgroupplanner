@@ -34,6 +34,7 @@ class StaffTransformForm(forms.Form):
         label="Anstellung",
         required=False,
         empty_label="– neue Anstellung je SAP-Vertragszeitraum –",
+        help_text="Direkt anschließende Vertragszeiträume verlängern die gewählte Anstellung.",
     )
     budget_item = forms.ModelChoiceField(StaffBudgetItem.objects.none(), label="Personalbudget")
     category = forms.ChoiceField(label="Kategorie", choices=list(EmploymentCategories.items()))

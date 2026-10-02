@@ -10,6 +10,7 @@ from staffing.utils import (
     get_salaries_by_month,
     get_sap_actuals_by_month,
     get_sap_correction_links,
+    employment_merge_candidates,
     get_sap_salary_mismatches,
     rebooking_cost_deltas,
 )
@@ -317,6 +318,23 @@ def warnings(request):
                 "detail": "Es ist keine Overhead-Position hinterlegt.",
                 "link": f"/projects/details/{project.acronym}/",
             })
+
+    # Back-to-back employments of a person that could be one.
+    for first, second, ok, reason in employment_merge_candidates(
+        Employment.objects.select_related("staff_member", "salary_category")
+    ):
+        warnings_list.append({
+            "severity": "info",
+            "title": f"Anstellungen zusammenführbar: {first.staff_member}" if ok
+            else f"Anschließende Anstellungen: {first.staff_member}",
+            "detail": (
+                f"{first.start_date} - {first.end_date} und {second.start_date} - {second.end_date} schließen direkt "
+                "aneinander an" + (" und können zu einer Anstellung zusammengeführt werden." if ok
+                                   else f", lassen sich aber nicht zusammenführen: {reason}")
+            ),
+            "link": f"/staffing/details/{first.staff_member.id}/",
+            "merge_employment_ids": (first.id, second.id) if ok else None,
+        })
 
     # 3) Overlapping salary periods per employment.
     for employment in Employment.objects.select_related("staff_member").prefetch_related("stafffundingallocation_set"):

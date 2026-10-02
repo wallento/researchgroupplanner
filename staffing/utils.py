@@ -339,3 +339,80 @@ def rebooking_person_month_deltas(rebookings=None):
                 pm = sum(get_allocation_person_months(allocation).values(), Decimal("0"))
                 deltas[allocation.budget_item_id] = deltas.get(allocation.budget_item_id, Decimal("0")) + sign * pm
     return deltas
+
+
+def employment_merge_check(first, second):
+    """Whether two employments can be merged; returns (ok, reason).
+
+    Mergeable are back-to-back employments of the same person with the same
+    percentage, category, status and pay grade. Level data must be equal or
+    set on one side only with a level start not after the merged start.
+    """
+    from datetime import timedelta
+
+    if first.staff_member_id != second.staff_member_id:
+        return False, "Die Anstellungen gehören zu verschiedenen Personen."
+    if first.end_date + timedelta(days=1) != second.start_date:
+        return False, "Die Anstellungen schließen nicht direkt aneinander an."
+    for field, label in (("percentage", "Umfang"), ("category", "Kategorie"), ("status", "Status")):
+        if getattr(first, field) != getattr(second, field):
+            return False, f"{label} unterscheidet sich ({_merge_value(first, field)} / {_merge_value(second, field)})."
+    if first.salary_category_id and second.salary_category_id and first.salary_category_id != second.salary_category_id:
+        return False, f"Entgeltgruppe unterscheidet sich ({first.salary_category} / {second.salary_category})."
+    first_level = (first.start_level, first.level_start_date)
+    second_level = (second.start_level, second.level_start_date)
+    if first.start_level and second.start_level and first_level != second_level:
+        return False, (
+            f"Stufen unterscheiden sich (Stufe {first.start_level} ab {first.level_start_date:%d.%m.%Y} / "
+            f"Stufe {second.start_level} ab {second.level_start_date:%d.%m.%Y})."
+        )
+    level_start = first.level_start_date or second.level_start_date
+    if level_start and level_start > first.start_date:
+        return False, (
+            f"Der Stufenbeginn {level_start:%d.%m.%Y} liegt nach dem Beginn der zusammengeführten Anstellung "
+            f"({first.start_date:%d.%m.%Y}); bitte Stufe und Stufenbeginn vorher angleichen."
+        )
+    return True, None
+
+
+def _merge_value(employment, field):
+    if field == "category":
+        return employment.get_category()
+    if field == "status":
+        return employment.get_status_display()
+    return f"{Decimal(employment.percentage).normalize():f} %"
+
+
+def employment_merge_candidates(employments):
+    """[(first, second, ok, reason)] for back-to-back employments of the same person."""
+    from datetime import timedelta
+
+    ordered = sorted(employments, key=lambda e: (e.staff_member_id, e.start_date))
+    candidates = []
+    for first, second in zip(ordered, ordered[1:]):
+        if first.staff_member_id == second.staff_member_id and first.end_date + timedelta(days=1) == second.start_date:
+            ok, reason = employment_merge_check(first, second)
+            candidates.append((first, second, ok, reason))
+    return candidates
+
+
+def merge_employments(first, second):
+    """Merge the following employment into the first one; costs and allocations stay the same."""
+    from django.db import transaction
+
+    ok, reason = employment_merge_check(first, second)
+    if not ok:
+        raise ValueError(reason)
+    with transaction.atomic():
+        # Open-ended allocations of the first employment would otherwise grow with it.
+        first.stafffundingallocation_set.filter(end_date__isnull=True).update(end_date=first.end_date)
+        second.stafffundingallocation_set.update(employment=first)
+        second.employmentsalaries_set.update(employment=first)
+        first.end_date = second.end_date
+        if not first.salary_category_id:
+            first.salary_category_id = second.salary_category_id
+        if not first.start_level:
+            first.start_level, first.level_start_date = second.start_level, second.level_start_date
+        first.save()
+        second.delete()
+    return first

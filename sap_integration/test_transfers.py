@@ -195,3 +195,42 @@ class ApplySalariesMultiFundMonthTests(ReconciliationTestBase):
 
         # 3000 from the imported sample fund plus 1000 from the other fund.
         self.assertEqual(get_salaries_by_month(employment)["2026-01"], Decimal("4000.00"))
+
+
+class StaffPlanningContinuityTests(ReconciliationTestBase):
+    def position(self, periods):
+        return SAPPosition.objects.create(
+            sap_import=self.sap_import, reference="4777777", kind=SAPPositionKind.STAFF, cost_type="7221",
+            person_name="Kontinuierlich, Karl", contract_periods=periods,
+        )
+
+    def test_back_to_back_periods_become_one_employment(self):
+        from sap_integration.transform import create_staff_planning
+
+        position = self.position([["2026-01-01", "2026-03-31"], ["2026-04-01", "2026-06-30"]])
+
+        member, allocations = create_staff_planning(
+            position, budget_item=self.staff_item, category="researcher", percentage=Decimal("100"),
+            first_name="Karl", last_name="Kontinuierlich", create_salaries=False,
+        )
+
+        self.assertEqual(member.employment_set.count(), 1)
+        self.assertEqual(member.employment_set.get().end_date, date(2026, 6, 30))
+        self.assertEqual(len(allocations), 2)
+
+    def test_preceding_employment_is_extended(self):
+        from sap_integration.transform import create_staff_planning
+
+        member = StaffMember.objects.create(first_name="Karl", last_name="Kontinuierlich")
+        employment = Employment.objects.create(staff_member=member, start_date=date(2025, 7, 1),
+                                               end_date=date(2025, 12, 31), percentage=Decimal("100"))
+        position = self.position([["2026-01-01", "2026-06-30"]])
+
+        create_staff_planning(
+            position, budget_item=self.staff_item, category="researcher", percentage=Decimal("100"),
+            staff_member=member, employment=employment, create_salaries=False,
+        )
+
+        employment.refresh_from_db()
+        self.assertEqual(employment.end_date, date(2026, 6, 30))
+        self.assertEqual(member.employment_set.count(), 1)
