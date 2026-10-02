@@ -102,11 +102,12 @@
               return {
                   id: itemId,
                   group: entry.group,
-                  content: entry.percentage + '\u00a0%' + (entry.status !== 'contract' ? ' (' + entry.status_label + ')' : '') + (entry.rebooking ? ' ⇄' : ''),
+                  content: entry.content ? escapeHtml(entry.content) : entry.percentage + '\u00a0%' + (entry.status !== 'contract' ? ' (' + entry.status_label + ')' : ''),
                   title: escapeHtml(entry.title),
                   start: start,
                   end: end,
-                  className: (entry.link ? 'has-link ' : '') + 'status-' + entry.status + (entry.rebooking ? ' allocation-rebook' : ''),
+                  className: (entry.link ? 'has-link ' : '') + 'status-' + entry.status
+                      + (entry.rebooking === 'in' ? ' allocation-rebook' : '') + (entry.rebooking === 'out' ? ' allocation-rebook-out' : ''),
               };
           });
 
@@ -123,7 +124,8 @@
           }
 
           var timeline = new vis.Timeline(container, items, groups, {
-              stack: false,
+              // Stack overlapping bars of a row, e.g. the parts of an allocation that are rebooked.
+              stack: true,
               min: paddedMin,
               max: paddedMax,
               start: paddedMin,

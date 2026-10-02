@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from projects.models import Project
 from staffing.models import Employment, Rebooking, StaffFundingAllocation, StaffMember
+from staffing.models import complete_rebooking as apply_rebooking
 from django.http import HttpRequest
 from django.utils import timezone
 
@@ -94,7 +95,7 @@ def details(request: HttpRequest, staff_id: int):
             allocation_timeline.append(_timeline_entry(allocation))
             allocation.open_rebookings = list(allocation.rebookings.select_related("budget_item__project"))
             for rebooking in allocation.open_rebookings:
-                allocation_timeline.append(_rebooking_timeline_entry(rebooking))
+                allocation_timeline.extend(_rebooking_timeline_entries(rebooking))
         sap_actuals = get_sap_actuals_by_month(employment.allocations)
         employment.has_sap_actuals = bool(sap_actuals)
         employment.sap_mismatches = get_sap_salary_mismatches(employment.salaries_by_month, sap_actuals)
@@ -114,24 +115,28 @@ def details(request: HttpRequest, staff_id: int):
     })
 
 
-def _timeline_entry(allocation):
-    """One bar of the funding timeline, grouped by funding source."""
-    link = None
+def _allocation_source(allocation_or_item):
+    """(group, label, link, title) of the funding source of an allocation."""
+    allocation = allocation_or_item
     if allocation.budget_item_id:
         project = allocation.budget_item.project
-        group, label = f"project-{project.id}", project.acronym
-        link = reverse("projects:details", args=[project.acronym])
-        title = f"{project.acronym} – {allocation.budget_item.title}"
-    elif allocation.annual_pool_budget_id:
+        return (
+            f"project-{project.id}", project.acronym, reverse("projects:details", args=[project.acronym]),
+            f"{project.acronym} – {allocation.budget_item.title}",
+        )
+    if allocation.annual_pool_budget_id:
         pool = allocation.annual_pool_budget.annual_pool
-        group, label = f"pool-{pool.id}", f"Annual Pool {pool.title}"
-        title = f"{label} ({allocation.annual_pool_budget.year})"
-    elif allocation.is_universal:
-        group, label = "universal", "Universalprojekt"
-        title = label
-    else:
-        group, label = f"landesstelle-{allocation.landesstelle_id}", f"Landesstelle {allocation.landesstelle.title}"
-        title = label
+        label = f"Annual Pool {pool.title}"
+        return f"pool-{pool.id}", label, None, f"{label} ({allocation.annual_pool_budget.year})"
+    if allocation.is_universal:
+        return "universal", "Universalprojekt", None, "Universalprojekt"
+    label = f"Landesstelle {allocation.landesstelle.title}"
+    return f"landesstelle-{allocation.landesstelle_id}", label, None, label
+
+
+def _timeline_entry(allocation):
+    """One bar of the funding timeline, grouped by funding source."""
+    group, label, link, title = _allocation_source(allocation)
     end = allocation.end_date or allocation.employment.end_date
     return {
         "id": allocation.id,
@@ -142,32 +147,38 @@ def _timeline_entry(allocation):
         "percentage": float(allocation.percentage),
         "status": allocation.employment.status,
         "status_label": allocation.employment.get_status_display(),
-        "rebooking": False,
+        "rebooking": None,
         "start": allocation.start_date.isoformat(),
         "end": end.isoformat(),
     }
 
 
-def _rebooking_timeline_entry(rebooking):
-    """Overlay bar of an open Umbuchung in the target project's row."""
-    project = rebooking.budget_item.project
+def _rebooking_timeline_entries(rebooking):
+    """Two overlay bars of an open Umbuchung: outgoing in the source row, incoming in the target row."""
     employment = rebooking.allocation.employment
-    return {
-        "id": f"rebooking-{rebooking.id}",
-        "group": f"project-{project.id}",
-        "label": project.acronym,
-        "link": reverse("projects:details", args=[project.acronym]),
-        "title": (
-            f"Umbuchung (offen) auf {project.acronym} – {rebooking.budget_item.title}: "
-            f"{rebooking.percentage.normalize():f} % ({rebooking.start_date:%d.%m.%Y} – {rebooking.end:%d.%m.%Y})"
-        ),
+    source_group, source_label, source_link, _ = _allocation_source(rebooking.allocation)
+    target = rebooking.budget_item.project
+    target_link = reverse("projects:details", args=[target.acronym])
+    percentage = f"{rebooking.percentage.normalize():f}"
+    title = (
+        f"Umbuchung (offen): {source_label} → {target.acronym} – {rebooking.budget_item.title}, "
+        f"{percentage} % ({rebooking.start_date:%d.%m.%Y} – {rebooking.end:%d.%m.%Y})"
+    )
+    common = {
+        "title": title,
         "percentage": float(rebooking.percentage),
         "status": employment.status,
         "status_label": employment.get_status_display(),
-        "rebooking": True,
         "start": rebooking.start_date.isoformat(),
         "end": rebooking.end.isoformat(),
     }
+    return [
+        {**common, "id": f"rebooking-out-{rebooking.id}", "group": source_group, "label": source_label,
+         "link": source_link, "rebooking": "out", "content": f"→ {target.acronym} · {percentage}\u00a0%"},
+        {**common, "id": f"rebooking-{rebooking.id}", "group": f"project-{target.id}", "label": target.acronym,
+         "link": target_link, "rebooking": "in", "content": f"← {source_label} · {percentage}\u00a0%"},
+    ]
+
 
 def plan_employment(request: HttpRequest):
     """Create an employment with its project allocation and projected salaries."""
@@ -323,34 +334,10 @@ def delete_rebooking(request: HttpRequest, rebooking_id: int):
 
 @require_POST
 def complete_rebooking(request: HttpRequest, rebooking_id: int):
-    """Apply an Umbuchung: split the allocation around the rebooked period."""
+    """Apply an Umbuchung (see staffing.models.complete_rebooking)."""
     rebooking = _rebooking(rebooking_id)
     allocation = rebooking.allocation
-    employment_end = allocation.employment.end_date
-    original_end, rebooked_end = allocation.end_date, rebooking.end
-    with transaction.atomic():
-        if rebooked_end < rebooking.allocation_end:
-            # Remainder after the rebooked period stays on the original budget.
-            remainder = StaffFundingAllocation.objects.get(pk=allocation.pk)
-            remainder.pk = None
-            remainder.start_date = rebooked_end + timedelta(days=1)
-            remainder.end_date = original_end
-            remainder.save()
-        if rebooking.start_date > allocation.start_date:
-            allocation.end_date = rebooking.start_date - timedelta(days=1)
-            allocation.save(update_fields=["end_date"])
-            rebooked = StaffFundingAllocation(employment=allocation.employment, start_date=rebooking.start_date)
-        else:
-            rebooked = allocation
-        rebooked.budget_item = rebooking.budget_item
-        rebooked.landesstelle = rebooked.annual_pool_budget = None
-        rebooked.is_universal = False
-        rebooked.percentage = rebooking.percentage
-        rebooked.end_date = None if (rebooked_end == employment_end and original_end is None) else rebooked_end
-        rebooked.is_rebooking = True
-        rebooked.full_clean()
-        rebooked.save()
-        rebooking.delete()
+    apply_rebooking(rebooking)
     messages.success(request, f"Umbuchung für {allocation.employment.staff_member} abgeschlossen (Vertrag).")
     return _redirect_back(request, rebooking)
 

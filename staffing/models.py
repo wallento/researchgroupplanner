@@ -390,15 +390,92 @@ class Rebooking(models.Model):
             )
         if self.end_date and not (self.start_date <= self.end_date <= self.allocation_end):
             raise ValidationError("„Bis“ muss zwischen „Ab“ und dem Ende der Zuordnung liegen.")
+        if self.percentage is not None:
+            overlapping = [
+                other for other in self.allocation.rebookings.exclude(pk=self.pk)
+                if other.start_date <= self.end and self.start_date <= other.end
+            ]
+            booked = sum((other.percentage for other in overlapping), self.percentage)
+            if booked > self.allocation.percentage:
+                raise ValidationError(
+                    f"Zusammen mit den überlappenden Umbuchungen würden {booked.normalize():f} % umgebucht, "
+                    f"die Zuordnung hat nur {self.allocation.percentage.normalize():f} %."
+                )
 
     def as_allocations(self):
-        """Unsaved (source, target) allocations covering the rebooked period, for cost calculations."""
+        """Unsaved (source, target) allocations covering the rebooked period, for cost calculations.
+
+        The source loses exactly the rebooked share; the rest stays where it is.
+        """
         source = StaffFundingAllocation(
             employment=self.allocation.employment, budget_item=self.allocation.budget_item,
-            percentage=self.allocation.percentage, start_date=self.start_date, end_date=self.end,
+            percentage=min(self.percentage, self.allocation.percentage), start_date=self.start_date, end_date=self.end,
         )
         target = StaffFundingAllocation(
             employment=self.allocation.employment, budget_item=self.budget_item,
             percentage=self.percentage, start_date=self.start_date, end_date=self.end,
         )
         return source, target
+
+
+def complete_rebooking(rebooking):
+    """Apply an Umbuchung: move its share of the allocation to the target budget for its period.
+
+    The allocation is split into the part before, the remainder during
+    (allocation minus rebooked share, if any) and the part after the period.
+    Other open Umbuchungen of the allocation move to the part they start in.
+    """
+    from datetime import timedelta
+
+    from django.db import transaction
+
+    allocation = rebooking.allocation
+    employment_end = allocation.employment.end_date
+    open_end = allocation.end_date is None
+    start, end = rebooking.start_date, rebooking.end
+
+    def end_value(day):
+        return None if open_end and day == employment_end else day
+
+    pieces = []
+    if start > allocation.start_date:
+        pieces.append((allocation.start_date, start - timedelta(days=1), allocation.percentage))
+    remaining = allocation.percentage - rebooking.percentage
+    if remaining > 0:
+        pieces.append((start, end, remaining))
+    if end < rebooking.allocation_end:
+        pieces.append((end + timedelta(days=1), rebooking.allocation_end, allocation.percentage))
+
+    others = list(allocation.rebookings.exclude(pk=rebooking.pk))
+    with transaction.atomic():
+        template = StaffFundingAllocation.objects.get(pk=allocation.pk)
+        saved = []
+        for index, (piece_start, piece_end, percentage) in enumerate(pieces):
+            piece = allocation if index == 0 else StaffFundingAllocation.objects.get(pk=template.pk)
+            if index:
+                piece.pk = None
+            piece.start_date, piece.end_date, piece.percentage = piece_start, end_value(piece_end), percentage
+            piece.save()
+            saved.append(piece)
+
+        target = StaffFundingAllocation(employment=allocation.employment) if saved else allocation
+        target.budget_item = rebooking.budget_item
+        target.landesstelle = target.annual_pool_budget = None
+        target.is_universal = False
+        target.percentage = rebooking.percentage
+        target.start_date, target.end_date = start, end_value(end)
+        target.is_rebooking = True
+        if saved:
+            target.sap_reference = ""
+        target.full_clean()
+        target.save()
+
+        for other in others:
+            piece = next(
+                (p for p in saved if p.start_date <= other.start_date <= (p.end_date or employment_end)), None,
+            )
+            if piece is not None:
+                other.allocation = piece
+                other.save(update_fields=["allocation"])
+        rebooking.delete()
+    return target

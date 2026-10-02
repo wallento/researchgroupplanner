@@ -23,7 +23,7 @@ class ReportingPeriodTests(TestCase):
         self.client.force_login(get_user_model().objects.create_user("user", password="x"))
         self.project = Project.objects.create(acronym="RP", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31),
                                               budget_total=Decimal("100000"))
-        staff_item = StaffBudgetItem.objects.create(project=self.project, title="WiMi", amount=Decimal("60000"))
+        staff_item = self.staff_item = StaffBudgetItem.objects.create(project=self.project, title="WiMi", amount=Decimal("60000"))
         travel = OtherBudgetItem.objects.create(project=self.project, title="Reisen", amount=Decimal("5000"))
         OtherBudgetItemTransaction.objects.create(budget_item=travel, date=date(2026, 3, 10), amount=Decimal("700"))
         OtherBudgetItemTransaction.objects.create(budget_item=travel, date=date(2026, 9, 1), amount=Decimal("300"))
@@ -32,8 +32,8 @@ class ReportingPeriodTests(TestCase):
                                                end_date=date(2026, 12, 31), percentage=Decimal("100"))
         EmploymentSalaries.objects.create(employment=employment, salary=Decimal("3000"),
                                           start_date=date(2026, 1, 1), end_date=date(2026, 12, 31))
-        StaffFundingAllocation.objects.create(employment=employment, budget_item=staff_item,
-                                              percentage=Decimal("100"), start_date=date(2026, 1, 1))
+        self.allocation = StaffFundingAllocation.objects.create(employment=employment, budget_item=staff_item,
+                                                                percentage=Decimal("100"), start_date=date(2026, 1, 1))
 
     def test_amount_in_period_prorates_partial_months(self):
         months = {"2026-04": Decimal("3000"), "2026-05": Decimal("3100")}
@@ -49,9 +49,12 @@ class ReportingPeriodTests(TestCase):
 
         reporting = response.context["reporting"]
         staff_row, travel_row = reporting["rows"]
-        self.assertEqual(staff_row["cells"], [(Decimal("18000.00"), Decimal("6")), (Decimal("18000.00"), Decimal("6"))])
+        self.assertEqual(
+            staff_row["cells"],
+            [(Decimal("18000.00"), Decimal("6"), None, None), (Decimal("18000.00"), Decimal("6"), None, None)],
+        )
         self.assertEqual([cell[0] for cell in travel_row["cells"]], [Decimal("700"), Decimal("300")])
-        self.assertEqual(reporting["totals"][0], (Decimal("18700.00"), Decimal("6")))
+        self.assertEqual(reporting["totals"][0], (Decimal("18700.00"), Decimal("6"), None, None))
         self.assertContains(response, "ZB 1")
         self.assertContains(response, "reporting_period_")
 
@@ -64,3 +67,40 @@ class ReportingPeriodTests(TestCase):
     def test_end_before_start_rejected(self):
         with self.assertRaises(ValidationError):
             ReportingPeriod(project=self.project, start_date=date(2026, 5, 1), end_date=date(2026, 4, 1)).clean()
+
+    def test_rebooking_effect_per_year_and_period(self):
+        from staffing.models import Rebooking
+
+        other = Project.objects.create(acronym="OTHER", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31),
+                                       budget_total=Decimal("100000"))
+        target = StaffBudgetItem.objects.create(project=other, title="WiMi", amount=Decimal("60000"))
+        Rebooking.objects.create(allocation=self.allocation, budget_item=target, percentage=Decimal("50"),
+                                 start_date=date(2026, 4, 1), end_date=date(2026, 9, 30))
+        ReportingPeriod.objects.create(project=self.project, start_date=date(2026, 1, 1), end_date=date(2026, 6, 30))
+
+        response = self.client.get(reverse("projects:details", args=["RP"]))
+
+        item = response.context["staff_budget_items"][0]
+        # 2026: 36.000 € and 12 PM; six months at 50 % move away.
+        self.assertEqual(item.year_cells[0], (Decimal("36000.00"), Decimal("12"), Decimal("27000.00"), Decimal("9")))
+        # The Summe row also contains the 1.000 € travel costs.
+        self.assertEqual(response.context["budget_totals"]["year_cells"][0][2:], (Decimal("28000.00"), Decimal("9")))
+        # First half year: April to June at 50 % move away.
+        staff_row = response.context["reporting"]["rows"][0]
+        self.assertEqual(staff_row["cells"][0], (Decimal("18000.00"), Decimal("6"), Decimal("13500.00"), Decimal("4.5")))
+        self.assertContains(response, "(€&nbsp;13.500,00 · 4,5&nbsp;PM)")
+
+    def test_unchanged_cells_show_no_rebooking_value(self):
+        from staffing.models import Rebooking
+
+        other = Project.objects.create(acronym="OTHER", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31),
+                                       budget_total=Decimal("100000"))
+        target = StaffBudgetItem.objects.create(project=other, title="WiMi", amount=Decimal("60000"))
+        Rebooking.objects.create(allocation=self.allocation, budget_item=target, percentage=Decimal("50"),
+                                 start_date=date(2026, 10, 1))
+        ReportingPeriod.objects.create(project=self.project, start_date=date(2026, 1, 1), end_date=date(2026, 6, 30))
+
+        response = self.client.get(reverse("projects:details", args=["RP"]))
+
+        self.assertEqual(response.context["reporting"]["rows"][0]["cells"][0][2:], (None, None))
+        self.assertEqual(response.context["reporting"]["totals"][0][2:], (None, None))

@@ -82,16 +82,18 @@ class AllocationUiTests(TestCase):
         self.client.post(reverse("staffing:complete_rebooking", args=[Rebooking.objects.get().id]))
 
         self.assertFalse(Rebooking.objects.exists())
-        parts = list(StaffFundingAllocation.objects.order_by("start_date"))
+        parts = list(StaffFundingAllocation.objects.order_by("start_date", "budget_item__project__acronym"))
+        # The remaining 40 % stay on the old budget during the rebooked period.
         self.assertEqual(
             [(p.budget_item, p.percentage, p.start_date, p.end_date, p.is_rebooking) for p in parts],
             [
                 (self.old_item, Decimal("100"), date(2026, 1, 1), date(2026, 3, 31), False),
                 (self.new_item, Decimal("60"), date(2026, 4, 1), date(2026, 6, 30), True),
+                (self.old_item, Decimal("40"), date(2026, 4, 1), date(2026, 6, 30), False),
                 (self.old_item, Decimal("100"), date(2026, 7, 1), None, False),
             ],
         )
-        self.assertEqual(parts[2].sap_reference, "4001234")
+        self.assertEqual({p.sap_reference for p in parts if p.budget_item == self.old_item}, {"4001234"})
 
     def test_complete_from_start_moves_allocation(self):
         self.rebook(start_date="2026-01-01")
@@ -113,7 +115,8 @@ class AllocationUiTests(TestCase):
 
         deltas = rebooking_cost_deltas()
 
-        self.assertEqual(deltas[self.old_item.id], Decimal("-6000.00"))
+        # July to December, 50 % of 1.000 € per month move to the new budget.
+        self.assertEqual(deltas[self.old_item.id], Decimal("-3000.00"))
         self.assertEqual(deltas[self.new_item.id], Decimal("3000.00"))
 
     def test_pages_show_rebooking(self):
@@ -125,6 +128,9 @@ class AllocationUiTests(TestCase):
 
         self.assertContains(details, reverse("staffing:delete_rebooking", args=[rebooking.id]))
         self.assertContains(details, f'"id": "rebooking-{rebooking.id}"')
+        self.assertContains(details, f'"id": "rebooking-out-{rebooking.id}"')
+        self.assertContains(details, '"content": "\\u2192 NEW')
+        self.assertContains(details, '"content": "\\u2190 OLD')
         self.assertEqual(list(listing.context["rebookings"]), [rebooking])
 
     def test_project_sums_show_rebooking_effect(self):
@@ -149,6 +155,71 @@ class AllocationUiTests(TestCase):
 
         deltas = rebooking_person_month_deltas()
 
-        # July to December: 6 PM leave the old budget, 3 PM (at 50 %) arrive on the new one.
-        self.assertEqual(deltas[self.old_item.id], Decimal("-6"))
+        # July to December at 50 %: 3 PM move from the old to the new budget.
+        self.assertEqual(deltas[self.old_item.id], Decimal("-3"))
         self.assertEqual(deltas[self.new_item.id], Decimal("3"))
+
+    def two_half_rebookings(self):
+        third = StaffBudgetItem.objects.create(
+            project=Project.objects.create(acronym="THIRD", start_date=date(2025, 1, 1), end_date=date(2027, 12, 31),
+                                           budget_total=Decimal("100000")),
+            title="WiMi", amount=Decimal("50000"),
+        )
+        self.rebook(percentage="50")
+        self.rebook(percentage="50", budget_item=third.id)
+        return third
+
+    def test_split_rebookings_move_each_share(self):
+        from staffing.models import EmploymentSalaries
+        from staffing.utils import rebooking_person_month_deltas
+
+        EmploymentSalaries.objects.create(
+            employment=self.employment, salary=Decimal("1000"), start_date=date(2026, 1, 1), end_date=date(2026, 12, 31),
+        )
+        third = self.two_half_rebookings()
+
+        costs, pms = rebooking_cost_deltas(), rebooking_person_month_deltas()
+
+        self.assertEqual(costs[self.old_item.id], Decimal("-6000.00"))
+        self.assertEqual((costs[self.new_item.id], costs[third.id]), (Decimal("3000.00"), Decimal("3000.00")))
+        self.assertEqual((pms[self.old_item.id], pms[self.new_item.id], pms[third.id]), (Decimal("-6"), Decimal("3"), Decimal("3")))
+
+    def test_rebookings_cannot_exceed_allocation(self):
+        self.two_half_rebookings()
+
+        response = self.rebook(percentage="10")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Rebooking.objects.count(), 2)
+
+    def test_completing_split_rebookings_one_after_another(self):
+        third = self.two_half_rebookings()
+        first, second = Rebooking.objects.order_by("pk")
+
+        self.client.post(reverse("staffing:complete_rebooking", args=[first.id]))
+        second.refresh_from_db()
+        self.assertEqual((second.allocation.percentage, second.allocation.start_date), (Decimal("50"), date(2026, 7, 1)))
+        self.client.post(reverse("staffing:complete_rebooking", args=[second.id]))
+
+        parts = list(StaffFundingAllocation.objects.order_by("start_date", "budget_item__project__acronym"))
+        self.assertEqual(
+            [(p.budget_item, p.percentage, p.start_date, p.end_date) for p in parts],
+            [
+                (self.old_item, Decimal("100"), date(2026, 1, 1), date(2026, 6, 30)),
+                (self.new_item, Decimal("50"), date(2026, 7, 1), None),
+                (third, Decimal("50"), date(2026, 7, 1), None),
+            ],
+        )
+        self.assertFalse(Rebooking.objects.exists())
+
+    def test_project_page_marks_rebookings_both_ways(self):
+        self.rebook(percentage="50")
+
+        old = self.client.get(reverse("projects:details", args=["OLD"]))
+        new = self.client.get(reverse("projects:details", args=["NEW"]))
+
+        self.assertContains(old, "→ NEW · 50")
+        self.assertContains(old, "allocation-rebook-out")
+        self.assertContains(old, "⇄ Umbuchung (offen) → NEW")
+        self.assertContains(new, "← OLD · 50")
+        self.assertContains(new, "⇄ Umbuchung (offen) ← OLD")

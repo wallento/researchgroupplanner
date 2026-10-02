@@ -67,8 +67,8 @@
             <tr>
                 <td>{{ budget.title }}</td>
                 <td>€&nbsp;{{ budget.amount }}</td>
-                {% for amount, pm in budget.year_cells %}
-                    <td>€&nbsp;{{ amount }}<div class="small text-muted">{{ pm|floatformat:1 }}&nbsp;PM</div></td>
+                {% for amount, pm, rebooked, rebooked_pm in budget.year_cells %}
+                    <td>€&nbsp;{{ amount }}<div class="small text-muted">{{ pm|floatformat:1 }}&nbsp;PM</div>{% if rebooked is not None %}<div class="small text-muted fw-normal text-nowrap" title="Mit offenen Umbuchungen">(€&nbsp;{{ rebooked }} · {{ rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
                 {% endfor %}
                 <td>€&nbsp;{{ budget.projected_sum }}<div class="small text-muted">{{ budget.pm_total|floatformat:1 }}&nbsp;PM</div>{% if budget.rebooked_sum %}<div class="small text-muted text-nowrap">(Umbuchungen: €&nbsp;{{ budget.rebooked_sum }} · {{ budget.rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
                 <td>€&nbsp;{{ budget.remain }}{% if budget.rebooked_sum %}<div class="small text-muted text-nowrap">(Umbuchungen: €&nbsp;{{ budget.rebooked_remain }})</div>{% endif %}</td>
@@ -90,8 +90,8 @@
         <tr class="fw-bold">
             <th scope="row">Summe</th>
             <td>€&nbsp;{{ budget_totals.amount }}</td>
-            {% for amount, pm in budget_totals.year_cells %}
-                <td>€&nbsp;{{ amount }}<div class="small text-muted fw-normal">{{ pm|floatformat:1 }}&nbsp;PM</div></td>
+            {% for amount, pm, rebooked, rebooked_pm in budget_totals.year_cells %}
+                <td>€&nbsp;{{ amount }}<div class="small text-muted fw-normal">{{ pm|floatformat:1 }}&nbsp;PM</div>{% if rebooked is not None %}<div class="small text-muted fw-normal text-nowrap" title="Mit offenen Umbuchungen">(€&nbsp;{{ rebooked }} · {{ rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
             {% endfor %}
             <td>€&nbsp;{{ budget_totals.projected }}<div class="small text-muted fw-normal">{{ budget_totals.pm_total|floatformat:1 }}&nbsp;PM</div>{% if budget_totals.rebooked_projected is not None %}<div class="small text-muted fw-normal text-nowrap">(Umbuchungen: €&nbsp;{{ budget_totals.rebooked_projected }} · {{ budget_totals.rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
             <td>€&nbsp;{{ budget_totals.remain }}{% if budget_totals.rebooked_remain is not None %}<div class="small text-muted fw-normal text-nowrap">(Umbuchungen: €&nbsp;{{ budget_totals.rebooked_remain }})</div>{% endif %}</td>
@@ -116,8 +116,8 @@
         {% for row in reporting.rows %}
             <tr>
                 <td>{{ row.title }}</td>
-                {% for amount, pm in row.cells %}
-                    <td>€&nbsp;{{ amount }}{% if row.staff %}<div class="small text-muted">{{ pm|floatformat:1 }}&nbsp;PM</div>{% endif %}</td>
+                {% for amount, pm, rebooked, rebooked_pm in row.cells %}
+                    <td>€&nbsp;{{ amount }}{% if row.staff %}<div class="small text-muted">{{ pm|floatformat:1 }}&nbsp;PM</div>{% endif %}{% if rebooked is not None %}<div class="small text-muted fw-normal text-nowrap" title="Mit offenen Umbuchungen">(€&nbsp;{{ rebooked }} · {{ rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
                 {% endfor %}
             </tr>
         {% endfor %}
@@ -125,8 +125,8 @@
     <tfoot>
         <tr class="fw-bold">
             <th scope="row">Summe</th>
-            {% for amount, pm in reporting.totals %}
-                <td>€&nbsp;{{ amount }}<div class="small text-muted fw-normal">{{ pm|floatformat:1 }}&nbsp;PM</div></td>
+            {% for amount, pm, rebooked, rebooked_pm in reporting.totals %}
+                <td>€&nbsp;{{ amount }}<div class="small text-muted fw-normal">{{ pm|floatformat:1 }}&nbsp;PM</div>{% if rebooked is not None %}<div class="small text-muted fw-normal text-nowrap" title="Mit offenen Umbuchungen">(€&nbsp;{{ rebooked }} · {{ rebooked_pm|floatformat:1 }}&nbsp;PM)</div>{% endif %}</td>
             {% endfor %}
         </tr>
     </tfoot>
@@ -274,9 +274,9 @@
         items.push({
             id: 'assignment_{{ forloop.counter0 }}',
             group: existingGroups['{{ assignment.employee|escapejs }}'],
-            content: '{{ assignment.category|escapejs }}{% if assignment.status != "contract" %} ({{ assignment.status_label|escapejs }}){% endif %}{% if assignment.rebooking %} ⇄{% endif %}',
-            className: 'status-{{ assignment.status }}{% if assignment.rebooking %} allocation-rebook{% endif %}',
-            title: '<strong>{{ assignment.employee|escapejs }}</strong><br>{{ assignment.category|escapejs }}{% if assignment.rebooking %}<br>Umbuchung (offen){% if assignment.rebooking_from %} von {{ assignment.rebooking_from|escapejs }}{% endif %}{% endif %}',
+            content: '{% if assignment.rebooking %}{{ assignment.rebooking_label|escapejs }}{% else %}{{ assignment.category|escapejs }}{% if assignment.status != "contract" %} ({{ assignment.status_label|escapejs }}){% endif %}{% endif %}',
+            className: 'status-{{ assignment.status }}{% if assignment.rebooking == "in" %} allocation-rebook{% elif assignment.rebooking == "out" %} allocation-rebook-out{% endif %}',
+            title: '<strong>{{ assignment.employee|escapejs }}</strong><br>{{ assignment.category|escapejs }}{% if assignment.rebooking %}<br>{{ assignment.rebooking_title|escapejs }}{% endif %}',
             start: gpBuildDate({{ assignment.start|date:"Y" }}, {{ assignment.start|date:"n" }}, {{ assignment.start|date:"j" }}),
             end: gpBuildDate({{ assignment.end|date:"Y" }}, {{ assignment.end|date:"n" }}, {{ assignment.end|date:"j" }})
         });
@@ -312,7 +312,8 @@
         }
 
         var timeline = new vis.Timeline(container, items, groups, {
-            stack: false,
+            // Stack overlapping bars of a person, e.g. rebooked parts of an allocation.
+            stack: true,
             min: windowRange.min,
             max: windowRange.max,
             start: windowRange.start,
@@ -377,8 +378,19 @@
     <tbody>
     {% for staffing in budget.staff_allocations %}
         <tr>
-            <td><a href="{% url 'staffing:details' staffing.allocation.employment.staff_member.id %}">{{ staffing.allocation.employment.staff_member }}</a><br/>({{ staffing.allocation.start_date }} - {{ staffing.allocation.end_date|default:staffing.allocation.employment.end_date }})</td>
+            <td><a href="{% url 'staffing:details' staffing.allocation.employment.staff_member.id %}">{{ staffing.allocation.employment.staff_member }}</a><br/>({{ staffing.allocation.start_date }} - {{ staffing.allocation.end_date|default:staffing.allocation.employment.end_date }})
+                {% for rebooking in staffing.outgoing_rebookings %}
+                    <div class="small text-muted">⇄ Umbuchung (offen) → {{ rebooking.budget_item.project.acronym }}: {{ rebooking.percentage|floatformat:"-2" }} % ({{ rebooking.start_date|date:"d.m.Y" }} – {{ rebooking.end|date:"d.m.Y" }})</div>
+                {% endfor %}
+            </td>
             <td style="text-align: right;">€&nbsp;{{ staffing.salary_sum }}<div class="small text-muted">{{ staffing.pm_total|floatformat:1 }}&nbsp;PM</div></td>
+        </tr>
+    {% endfor %}
+    {% for incoming in budget.incoming_rebookings %}
+        <tr class="text-muted">
+            <td>⇄ Umbuchung (offen) ← {{ incoming.source_label }}: <a href="{% url 'staffing:details' incoming.rebooking.allocation.employment.staff_member_id %}">{{ incoming.rebooking.allocation.employment.staff_member }}</a>
+                <br/>({{ incoming.rebooking.start_date }} - {{ incoming.rebooking.end }}, {{ incoming.rebooking.percentage|floatformat:"-2" }} %)</td>
+            <td style="text-align: right;">(€&nbsp;{{ incoming.cost }})<div class="small">({{ incoming.pm|floatformat:1 }}&nbsp;PM)</div></td>
         </tr>
     {% endfor %}
         <tr>

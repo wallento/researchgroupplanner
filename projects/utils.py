@@ -93,24 +93,34 @@ def get_timeline_allocations(project: Project) -> list[dict]:
             "category": allocation.employment.get_category(),
             "status": allocation.employment.status,
             "status_label": allocation.employment.get_status_display(),
-            "rebooking": False,
+            "rebooking": None,
             "start": allocation.start_date,
             "end": allocation.end_date or allocation.employment.end_date
         })
-    # Open Umbuchungen onto this project are shown as overlay bars.
+    # Open Umbuchungen onto ("in") and away from ("out") this project are shown as extra bars.
+    from django.db.models import Q
+
     from staffing.models import Rebooking
-    for rebooking in Rebooking.objects.filter(budget_item__project=project).select_related(
-        "allocation__employment__staff_member", "allocation__budget_item__project",
-    ):
+    for rebooking in Rebooking.objects.filter(
+        Q(budget_item__project=project) | Q(allocation__budget_item__project=project)
+    ).select_related("allocation__employment__staff_member", "allocation__budget_item__project", "budget_item__project"):
         employment = rebooking.allocation.employment
         source = rebooking.allocation.budget_item
+        source_label = source.project.acronym if source else "Umbuchung"
+        incoming = rebooking.budget_item.project_id == project.id
+        percentage = f"{rebooking.percentage.normalize():f}\u00a0%"
         allocations.append({
             "employee": employment.staff_member,
             "category": employment.get_category(),
             "status": employment.status,
             "status_label": employment.get_status_display(),
-            "rebooking": True,
-            "rebooking_from": source.project.acronym if source else "",
+            "rebooking": "in" if incoming else "out",
+            "rebooking_label": (
+                f"← {source_label} · {percentage}" if incoming else f"→ {rebooking.budget_item.project.acronym} · {percentage}"
+            ),
+            "rebooking_title": (
+                f"Umbuchung (offen): {source_label} → {rebooking.budget_item.project.acronym}, {percentage}"
+            ),
             "start": rebooking.start_date,
             "end": rebooking.end,
         })

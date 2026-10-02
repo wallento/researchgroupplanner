@@ -416,3 +416,25 @@ def merge_employments(first, second):
         first.save()
         second.delete()
     return first
+
+
+def rebooking_effects(rebookings=None):
+    """[(budget item id, sign, SalaryAllocation)] of the open Umbuchungen.
+
+    Each Umbuchung removes its share from the source budget (sign -1) and adds
+    it to the target budget (sign +1); the SalaryAllocation carries the monthly
+    costs and the unsaved allocation for person months.
+    """
+    from projects.utils import calculate_salary_for_allocation
+
+    from .models import Rebooking
+
+    if rebookings is None:
+        rebookings = Rebooking.objects.select_related("allocation__employment")
+    effects = []
+    for rebooking in rebookings:
+        source, target = rebooking.as_allocations()
+        for allocation, sign in ((source, -1), (target, 1)):
+            if allocation.budget_item_id:
+                effects.append((allocation.budget_item_id, sign, calculate_salary_for_allocation(allocation)))
+    return effects
