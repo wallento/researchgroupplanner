@@ -273,11 +273,24 @@ def _compare_percentage(check):
 
 
 def _compare_salaries(check):
+    shifted = []
     for month, actual in sorted(check.position.monthly_actuals.items()):
         actual = Decimal(actual)
         planned = check.planned_months.get(month, Decimal("0.00"))
         if abs(actual - planned) > SALARY_TOLERANCE:
             check.salary_mismatch_months.append((month, actual, planned))
+    if check.salary_mismatch_months:
+        # Payroll sometimes moves amounts between funds; if all funds together
+        # match the planning, the month is fine for this person.
+        sap_by_month, planned_by_month = _all_funds_months(check.position.reference)
+        for month, actual, planned in list(check.salary_mismatch_months):
+            if abs(sap_by_month.get(month, Decimal("0")) - planned_by_month.get(month, Decimal("0"))) <= SALARY_TOLERANCE:
+                check.salary_mismatch_months.remove((month, actual, planned))
+                shifted.append(f"{month} ({actual - planned:+,.2f} €)")
+    if shifted:
+        check.notes.append(
+            f"Verschiebung zwischen Fonds, Summe über alle Fonds stimmt: {', '.join(shifted)}."
+        )
     if check.salary_mismatch_months:
         sample = ", ".join(
             f"{month}: SAP {actual:,.2f} € / Plan {planned:,.2f} €"
@@ -287,6 +300,29 @@ def _compare_salaries(check):
         if more > 0:
             sample += f" (+{more} weitere)"
         check.findings.append(f"Gehaltsabweichung in {len(check.salary_mismatch_months)} Monat(en): {sample}")
+
+
+def _all_funds_months(reference):
+    """({month: SAP actual}, {month: planned}) for an SAP reference across all funds and projects."""
+    from sap_integration.models import SAPPosition
+
+    sap = {}
+    latest_imports = {}
+    for position in SAPPosition.objects.filter(reference=reference, kind=SAPPositionKind.STAFF).select_related(
+        "sap_import"
+    ).order_by("-sap_import__imported_at"):
+        fund_id = position.sap_import.fund_id
+        if latest_imports.setdefault(fund_id, position.sap_import_id) != position.sap_import_id:
+            continue
+        for month, amount in position.monthly_actuals.items():
+            sap[month] = sap.get(month, Decimal("0")) + Decimal(amount)
+    planned = {}
+    for allocation in StaffFundingAllocation.objects.filter(sap_reference__contains=reference).select_related("employment"):
+        if reference not in references(allocation.sap_reference):
+            continue
+        for month, amount in calculate_salary_for_allocation(allocation).months.items():
+            planned[month] = planned.get(month, Decimal("0")) + Decimal(amount)
+    return sap, planned
 
 
 def _compare_obligo(check, unplanned_months):

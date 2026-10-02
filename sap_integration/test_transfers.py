@@ -313,3 +313,33 @@ class ObligoWarningTests(ReconciliationTestBase):
         entry = next(w for w in warnings if w["title"].startswith("SAP-Obligo nicht in Planung"))
         self.assertIn("Position fehlt in der Planung", entry["details"][0])
         self.assertTrue(entry["correction_links"][0]["url"].startswith("/"))
+
+
+class CrossFundShiftTests(ReconciliationTestBase):
+    def test_shift_between_funds_is_not_a_salary_mismatch(self):
+        from projects.models import Project, SAPFund, StaffBudgetItem
+        from sap_integration.crosscheck import build_reconciliation
+        from staffing.models import EmploymentSalaries
+
+        member = StaffMember.objects.create(first_name="Erika", last_name="Muster-Frau")
+        employment = Employment.objects.create(staff_member=member, start_date=date(2026, 1, 1),
+                                               end_date=date(2026, 2, 28), percentage=Decimal("50"))
+        EmploymentSalaries.objects.create(employment=employment, salary=Decimal("3000"),
+                                          start_date=date(2026, 1, 1), end_date=date(2026, 2, 28))
+        StaffFundingAllocation.objects.create(employment=employment, budget_item=self.staff_item, percentage=Decimal("50"),
+                                              start_date=date(2026, 1, 1), end_date=date(2026, 2, 28), sap_reference="4000100")
+        # Another fund books -100 € for January (moved here, +100 € in the sample fund would be needed).
+        other_project = Project.objects.create(acronym="OTHER", start_date=date(2025, 1, 1), end_date=date(2027, 12, 31),
+                                               budget_total=Decimal("1000"))
+        other_fund = SAPFund.objects.create(fund_number="OTHER", project=other_project)
+        other_import = SAPImport.objects.create(fund=other_fund, file_name="other.xlsx")
+        SAPPosition.objects.create(sap_import=other_import, reference="4000100", kind=SAPPositionKind.STAFF,
+                                   cost_type="7221", monthly_actuals={"2026-01": "-100.00"})
+        position = self.check("4000100").position
+        position.monthly_actuals = {"2026-01": "3100.00", "2026-02": "3000.00"}
+        position.save()
+
+        check = next(c for c in build_reconciliation(self.fund).checks if c.position.reference == "4000100")
+
+        self.assertEqual(check.salary_mismatch_months, [])
+        self.assertTrue(any("Verschiebung zwischen Fonds" in note for note in check.notes))
