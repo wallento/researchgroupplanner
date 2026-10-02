@@ -1,18 +1,28 @@
 from controlling.utils import render
 
-from django.shortcuts import get_object_or_404
+from django.contrib import messages
+from datetime import date
+
+from dateutil.relativedelta import relativedelta
+from django.db import transaction
+from django.views.decorators.http import require_POST
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from staffing.models import StaffMember
+from projects.models import Project
+from staffing.models import Employment, StaffFundingAllocation, StaffMember
 from django.http import HttpRequest
 from django.utils import timezone
 
 from projects.models import EmploymentCategories
 
+from .forms import PlanEmploymentForm
 from .utils import (
+    apply_tariff_salaries,
     get_salaries_by_month,
     get_sap_actuals_by_month,
     get_sap_correction_links,
     get_sap_salary_mismatches,
+    level_defaults,
 )
 
 def index(request):
@@ -79,6 +89,8 @@ def details(request: HttpRequest, staff_id: int):
         employment.has_sap_actuals = bool(sap_actuals)
         employment.sap_mismatches = get_sap_salary_mismatches(employment.salaries_by_month, sap_actuals)
         employment.sap_correction_links = get_sap_correction_links(sap_actuals, employment.sap_mismatches)
+        employment.can_estimate = bool(employment.salary_category_id and employment.start_level)
+        employment.estimate_from = _estimate_from(employment, sap_actuals)
         mismatch_months = {mismatch["month"] for mismatch in employment.sap_mismatches}
         employment.salary_rows = [
             (month, salary, sap_actuals.get(month, []), month in mismatch_months)
@@ -116,8 +128,92 @@ def _timeline_entry(allocation):
         "group": group,
         "label": label,
         "link": link,
-        "title": f"{title}: {allocation.percentage.normalize():f} % ({allocation.start_date:%d.%m.%Y} – {end:%d.%m.%Y})",
+        "title": f"{title}: {allocation.percentage.normalize():f} % – {allocation.employment.get_status_display()} ({allocation.start_date:%d.%m.%Y} – {end:%d.%m.%Y})",
         "percentage": float(allocation.percentage),
+        "status": allocation.employment.status,
+        "status_label": allocation.employment.get_status_display(),
         "start": allocation.start_date.isoformat(),
         "end": end.isoformat(),
     }
+
+def plan_employment(request: HttpRequest):
+    """Create an employment with its project allocation and projected salaries."""
+    project = None
+    if request.GET.get("project"):
+        project = get_object_or_404(Project, acronym=request.GET["project"])
+    initial = {}
+    staff_defaults = {
+        member.id: defaults
+        for member in StaffMember.objects.prefetch_related("employment_set")
+        if (defaults := level_defaults(member))
+    }
+    if request.GET.get("staff"):
+        member = get_object_or_404(StaffMember, id=request.GET["staff"])
+        initial["staff_member"] = member
+        initial.update(staff_defaults.get(member.id, {}))
+
+    form = PlanEmploymentForm(request.POST or None, project=project, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        data = form.cleaned_data
+        with transaction.atomic():
+            staff_member = data["staff_member"] or StaffMember.objects.create(
+                first_name=data["first_name"], last_name=data["last_name"], status="in_hire",
+            )
+            employment = Employment.objects.create(
+                staff_member=staff_member,
+                start_date=data["start_date"],
+                end_date=data["end_date"],
+                percentage=data["percentage"],
+                category=data["category"],
+                status=data["status"],
+                salary_category=data["salary_category"],
+                start_level=data["start_level"],
+                level_start_date=data["level_start_date"] if data["start_level"] else None,
+            )
+            StaffFundingAllocation.objects.create(
+                employment=employment,
+                budget_item=data["budget_item"],
+                percentage=data["percentage"],
+                start_date=data["start_date"],
+                end_date=data["end_date"],
+            )
+            missing = apply_tariff_salaries(employment) if data["salary_category"] else None
+        messages.success(request, f"Anstellung für {staff_member} ({employment.get_status_display()}) angelegt.")
+        if missing:
+            messages.warning(
+                request,
+                "Für folgende Monate gibt es keinen Tabellenwert, bitte Gehalt ergänzen: " + ", ".join(missing),
+            )
+        elif missing is None:
+            messages.warning(request, "Ohne Entgeltgruppe wurden keine Gehälter angelegt.")
+        return redirect("staffing:details", staff_id=staff_member.id)
+
+    return render(request, "staffing/plan_employment.html", {
+        "form": form,
+        "project": project,
+        "staff_defaults": staff_defaults,
+    })
+
+
+def _estimate_from(employment, sap_actuals):
+    """First month to estimate: after the last month booked in SAP, else the employment start."""
+    if not sap_actuals:
+        return employment.start_date.strftime("%Y-%m")
+    last = date.fromisoformat(f"{max(sap_actuals)}-01")
+    return (last + relativedelta(months=1)).strftime("%Y-%m")
+
+
+@require_POST
+def estimate_salaries(request: HttpRequest, employment_id: int):
+    employment = get_object_or_404(Employment.objects.select_related("staff_member", "salary_category"), id=employment_id)
+    from_month = request.POST.get("from_month") or None
+    if not (employment.salary_category_id and employment.start_level):
+        messages.error(request, "Für die Schätzung bitte Entgeltgruppe und Stufe bei der Anstellung hinterlegen.")
+    else:
+        with transaction.atomic():
+            missing = apply_tariff_salaries(employment, from_month=from_month)
+        start = from_month or employment.start_date.strftime("%Y-%m")
+        messages.success(request, f"Gehälter ab {start} aus den Entgelttabellen geschätzt.")
+        if missing:
+            messages.warning(request, "Ohne Tabellenwert, unverändert gelassen: " + ", ".join(missing))
+    return redirect("staffing:details", staff_id=employment.staff_member_id)

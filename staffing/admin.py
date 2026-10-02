@@ -1,7 +1,15 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import Employment, EmploymentSalaries, StaffFundingAllocation, StaffMember
+from .models import (
+    Employment,
+    EmploymentSalaries,
+    SalaryCategory,
+    SalaryTable,
+    SalaryTableEntry,
+    StaffFundingAllocation,
+    StaffMember,
+)
 
 class EmploymentInline(admin.StackedInline):
     model = Employment
@@ -43,7 +51,27 @@ class StaffFundingAllocationInline(admin.TabularInline):
     extra = 0
 
 class EmploymentAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "salary_category", "start_date", "end_date")
+    list_filter = ("salary_category", "category")
     inlines = [EmploymentSalariesInline, StaffFundingAllocationInline]
 
 admin.site.register(Employment, EmploymentAdmin)
 admin.site.register(StaffFundingAllocation)
+
+
+@admin.register(SalaryCategory)
+class SalaryCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "special_payment_rate")
+    search_fields = ("name",)
+
+
+class SalaryTableEntryInline(admin.TabularInline):
+    model = SalaryTableEntry
+    extra = 0
+    fields = ("salary_category", "level", "gross", "amount")
+
+
+@admin.register(SalaryTable)
+class SalaryTableAdmin(admin.ModelAdmin):
+    list_display = ("name", "valid_from", "valid_until")
+    inlines = [SalaryTableEntryInline]

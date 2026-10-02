@@ -152,3 +152,151 @@ def _month_keys(start, end):
     while current <= end:
         yield current.strftime("%Y-%m")
         current += relativedelta(months=1)
+
+
+def level_defaults(staff_member):
+    """Default TV-L classification for a new employment of an existing person.
+
+    Continues the most recent employment with level data; otherwise Stufe 1
+    from the start of the person's first employment. None without employments.
+    """
+    employments = sorted(staff_member.employment_set.all(), key=lambda e: e.start_date)
+    if not employments:
+        return None
+    with_level = [e for e in employments if e.start_level and e.level_start_date]
+    latest = with_level[-1] if with_level else None
+    category_source = latest or next((e for e in reversed(employments) if e.salary_category_id), None)
+    return {
+        "start_level": latest.start_level if latest else 1,
+        "level_start_date": (latest.level_start_date if latest else employments[0].start_date).isoformat(),
+        "salary_category": category_source.salary_category_id if category_source else None,
+    }
+
+
+def special_payment(employment, year):
+    """Projected Jahressonderzahlung (§ 20 TV-L) of an employment for a year.
+
+    Returns {"gross", "cost"} or None. Entitled is who is employed on
+    1 December. The base is the average monthly table pay of July to
+    September, or the first full calendar month if the employment started
+    after 31 August; each month of the year without pay reduces it by a
+    twelfth. Consecutive employments of the person count as one.
+    """
+    from datetime import date, timedelta
+
+    from .tvl import rates_on, special_payment_cost
+
+    rate = employment.salary_category.special_payment_rate if employment.salary_category_id else None
+    december = date(year, 12, 1)
+    if rate is None or not (employment.start_date <= december <= employment.end_date):
+        return None
+
+    # Employments of the person that form one continuous employment relationship.
+    chain = [employment]
+    others = sorted(employment.staff_member.employment_set.exclude(pk=employment.pk), key=lambda e: e.start_date)
+    for other in reversed(others):
+        if other.end_date < chain[0].start_date and other.end_date + timedelta(days=1) >= chain[0].start_date:
+            chain.insert(0, other)
+    relationship_start = chain[0].start_date
+
+    def full_month_gross(month_start):
+        month_end = _month_end(month_start.strftime("%Y-%m"))
+        for part in chain:
+            if part.start_date <= month_start and part.end_date >= month_end:
+                return part.tariff_gross_at(month_start)
+        return None
+
+    base_months = []
+    if relationship_start <= date(year, 8, 31):
+        base_months = [g for g in (full_month_gross(date(year, m, 1)) for m in (7, 8, 9)) if g is not None]
+    if not base_months:
+        first_full = relationship_start if relationship_start.day == 1 else (
+            relationship_start.replace(day=1) + relativedelta(months=1)
+        )
+        gross = full_month_gross(first_full)
+        base_months = [gross] if gross is not None else []
+    if not base_months:
+        return None
+    base = sum(base_months) / len(base_months)
+
+    paid_months = sum(
+        1 for m in range(1, 13)
+        if any(
+            part.start_date <= _month_end(f"{year}-{m:02d}") and part.end_date >= date(year, m, 1)
+            for part in chain
+        )
+    )
+    special_gross = (base * rate / 100 * paid_months / 12).quantize(CENT)
+    november = date(year, 11, 1)
+    regular_gross = employment.tariff_gross_at(max(november, employment.start_date)) or base
+    return {"gross": special_gross, "cost": special_payment_cost(special_gross, regular_gross, rates_on(november))}
+
+
+def apply_tariff_salaries(employment, from_month=None):
+    """Fill the employment's salaries from the TV-L tables, incl. Jahressonderzahlung in November.
+
+    Months before from_month ("YYYY-MM") keep their current amounts. Full
+    months become monthly rates (equal consecutive months merged); partial
+    months and November with the Jahressonderzahlung become exact amounts.
+    Returns the months without a table amount, which also keep their amounts.
+    """
+    from datetime import date
+
+    from .models import EmploymentSalaries
+
+    existing = get_salaries_by_month(employment)
+    months = []  # (first_day, last_day, amount, is_rate)
+    missing = []
+    for month in _month_keys(employment.start_date, employment.end_date):
+        month_start = date.fromisoformat(f"{month}-01")
+        first_day = max(month_start, employment.start_date)
+        last_day = min(_month_end(month), employment.end_date)
+        is_full = first_day == month_start and last_day == _month_end(month)
+        if from_month and month < from_month:
+            amount, is_rate = existing.get(month, Decimal("0.00")), is_full
+        else:
+            rate = employment.tariff_amount_at(first_day)
+            if rate is None:
+                missing.append(month)
+                amount, is_rate = existing.get(month, Decimal("0.00")), is_full
+            else:
+                days = monthrange(month_start.year, month_start.month)[1]
+                amount = rate if is_full else (rate * ((last_day - first_day).days + 1) / days).quantize(CENT)
+                is_rate = is_full
+                bonus = special_payment(employment, month_start.year) if month_start.month == 11 else None
+                if bonus:
+                    amount += bonus["cost"]
+                    is_rate = False
+        if amount:
+            months.append((first_day, last_day, amount, is_rate))
+
+    records = []
+    for first_day, last_day, amount, is_rate in months:
+        previous = records[-1] if records else None
+        if (
+            is_rate and previous and not previous.is_exact_amount and previous.salary == amount
+            and previous.end_date + relativedelta(days=1) == first_day
+        ):
+            previous.end_date = last_day
+            continue
+        records.append(EmploymentSalaries(
+            employment=employment, salary=amount, start_date=first_day, end_date=last_day,
+            is_exact_amount=not is_rate,
+        ))
+
+    employment.employmentsalaries_set.all().delete()
+    EmploymentSalaries.objects.bulk_create(records)
+    return missing
+
+
+def _previous_month_key(month):
+    from datetime import date
+
+    return (date.fromisoformat(f"{month}-01") - relativedelta(months=1)).strftime("%Y-%m")
+
+
+def _month_end(month):
+    from datetime import date
+
+    first = date.fromisoformat(f"{month}-01")
+    return first.replace(day=monthrange(first.year, first.month)[1])

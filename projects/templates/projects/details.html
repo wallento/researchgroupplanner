@@ -87,7 +87,10 @@
     </tfoot>
 </table>
 
-<h2 id="timeline">Staffing</h2>
+<div class="d-flex justify-content-between align-items-center">
+    <h2 id="timeline">Staffing</h2>
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'staffing:plan_employment' %}?project={{ project.acronym|urlencode }}">Anstellung planen</a>
+</div>
 <link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
 <script src="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.js' %}"></script>
 
@@ -215,7 +218,8 @@
         items.push({
             id: 'assignment_{{ forloop.counter0 }}',
             group: existingGroups['{{ assignment.employee|escapejs }}'],
-            content: '{{ assignment.category|escapejs }}',
+            content: '{{ assignment.category|escapejs }}{% if assignment.status != "contract" %} ({{ assignment.status_label|escapejs }}){% endif %}',
+            className: 'status-{{ assignment.status }}',
             title: '<strong>{{ assignment.employee|escapejs }}</strong><br>{{ assignment.category|escapejs }}',
             start: gpBuildDate({{ assignment.start|date:"Y" }}, {{ assignment.start|date:"n" }}, {{ assignment.start|date:"j" }}),
             end: gpBuildDate({{ assignment.end|date:"Y" }}, {{ assignment.end|date:"n" }}, {{ assignment.end|date:"j" }})
@@ -282,9 +286,11 @@
         });
     });
 </script>
+{% include "controlling/_employment_status_styles.html" %}
 <div id="timeline_scroll" class="timeline-scroll">
     <div id="timeline" class="timeline-shell"></div>
 </div>
+{% include "controlling/_employment_status_legend.html" %}
 
 <h2>Personalbudgetmittel</h2>
 

@@ -1,0 +1,27 @@
+<style>
+    /* Planned employments: light fill, dashed border, dark text; overrides inline item colours. */
+    .vis-item.status-planned {
+        background-color: #fff3cd !important;
+        background-image: none !important;
+        border: 2px dashed #b58105 !important;
+    }
+
+    .vis-item.status-planned .vis-item-content {
+        color: #5c4200 !important;
+        font-style: italic;
+    }
+
+    .vis-item.status-rebook {
+        border-style: dashed !important;
+        background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.35) 0 6px, transparent 6px 12px) !important;
+    }
+
+    .status-legend-swatch {
+        display: inline-block;
+        width: 1.6rem;
+        height: 0.8rem;
+        border-radius: 3px;
+        vertical-align: middle;
+        margin-right: 0.3rem;
+    }
+</style>

@@ -1110,10 +1110,11 @@ def main(request):
             'staff': staff_name,
             'staff_id': employment.staff_member.id,
             'percentage': employment.percentage,
-            'label': f"Vertrag {_decimal_2(employment.percentage)}%",
+            'label': f"{employment.get_status_display()} {Decimal(employment.percentage).normalize():f}%",
+            'status': employment.status,
             'tooltip_html': (
                 f"<strong>{staff_name}</strong><br>"
-                f"Vertrag: {employment.get_category()} "
+                f"{employment.get_status_display()}: {employment.get_category()} "
                 f"({_decimal_2(employment.percentage)}%)<br>"
                 f"{employment.start_date} - {employment.end_date}<br><br>"
                 f"<strong>Zuordnungen:</strong><br>{allocation_html}"

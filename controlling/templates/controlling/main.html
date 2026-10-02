@@ -455,7 +455,8 @@
         items.push({
             id: itemId,
             group: groupId,
-            content: 'Vertrag ' + percentage + '%',
+            content: '{{ row.label|escapejs }}',
+            className: 'status-{{ row.status }}',
             start: startDate,
             end: endDate,
             style: 'background-color: ' + gpPercentageColor(percentage) + '; border-color: #4e78b4; color: #ffffff;'
@@ -575,7 +576,8 @@
         items.push({
             id: itemId,
             group: groupId,
-            content: 'Vertrag ' + percentage + '%',
+            content: '{{ row.label|escapejs }}',
+            className: 'status-{{ row.status }}',
             start: startDate,
             end: endDate,
             style: 'background-color: ' + gpPercentageColor(percentage) + '; border-color: #4e78b4; color: #ffffff;'
@@ -672,6 +674,7 @@
     });
 </script>
 
+{% include "controlling/_employment_status_styles.html" %}
 <div id="timeline_employees_scroll" class="timeline-scroll">
     <div id="timeline_employees" class="timeline-shell timeline-shell--staff"></div>
 </div>
@@ -681,6 +684,7 @@
 <div id="timeline_hiwis_scroll" class="timeline-scroll">
     <div id="timeline_hiwis" class="timeline-shell timeline-shell--staff"></div>
 </div>
+{% include "controlling/_employment_status_legend.html" %}
 
 <h2 class="mt-2">Jahresscheiben</h2>
 

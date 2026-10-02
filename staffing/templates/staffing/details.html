@@ -102,11 +102,11 @@
               return {
                   id: itemId,
                   group: entry.group,
-                  content: entry.percentage + '\u00a0%',
+                  content: entry.percentage + '\u00a0%' + (entry.status !== 'contract' ? ' (' + entry.status_label + ')' : ''),
                   title: escapeHtml(entry.title),
                   start: start,
                   end: end,
-                  className: entry.link ? 'has-link' : '',
+                  className: (entry.link ? 'has-link ' : '') + 'status-' + entry.status,
               };
           });
 
@@ -156,14 +156,27 @@
           });
       });
   </script>
-  <div class="timeline-scroll">
+  {% include "controlling/_employment_status_styles.html" %}
+  <div class="timeline-scroll mb-1">
       <div id="allocation_timeline"></div>
   </div>
+  {% include "controlling/_employment_status_legend.html" %}
 
-  <h2>Anstellungen & Gehälter</h2>
+  <div class="d-flex justify-content-between align-items-center">
+    <h2>Anstellungen & Gehälter</h2>
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'staffing:plan_employment' %}?staff={{ staff_member.id }}">Anstellung planen</a>
+  </div>
 
     {% for employment in employments %}
-      <h3>{{ employment.get_category }} ({{ employment.start_date }} - {{ employment.end_date }}, {{ employment.percentage }}%)</h3>
+      <h3>{{ employment.get_category }}{% if employment.salary_category %}, {{ employment.salary_category }}{% endif %} ({{ employment.start_date }} - {{ employment.end_date }}, {{ employment.percentage }}%)
+        {% if employment.status != "contract" %}<span class="badge text-bg-info align-middle fs-6">{{ employment.get_status_display }}</span>{% endif %}
+      </h3>
+      {% if employment.level_steps %}
+        <p class="text-muted">
+          Stufenbeginn (fiktiv) {{ employment.level_start_date|date:"d.m.Y" }} in Stufe {{ employment.start_level }} ·
+          {% for level, since in employment.level_steps %}Stufe {{ level }} ab {{ since|date:"d.m.Y" }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </p>
+      {% endif %}
 
       <h4>Finanzierungszuordnungen</h4>
       {% if employment.allocations %}
@@ -199,7 +212,18 @@
         <p class="text-muted">Keine Finanzierungszuordnungen hinterlegt.</p>
       {% endif %}
 
-      <h4>Gehälter</h4>
+      <div class="d-flex justify-content-between align-items-center">
+        <h4>Gehälter</h4>
+        {% if employment.can_estimate %}
+          <form method="post" action="{% url 'staffing:estimate_salaries' employment.id %}" class="d-flex gap-2 align-items-center"
+                onsubmit="return confirm('Gehälter ab dem gewählten Monat aus den Entgelttabellen schätzen? Bestehende Werte ab diesem Monat werden ersetzt.');">
+            {% csrf_token %}
+            <label class="small text-muted text-nowrap" for="estimate-from-{{ employment.id }}">ab</label>
+            <input type="month" id="estimate-from-{{ employment.id }}" name="from_month" value="{{ employment.estimate_from }}" class="form-control form-control-sm" style="width: 10rem;">
+            <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">Gehälter schätzen</button>
+          </form>
+        {% endif %}
+      </div>
       {% if employment.sap_mismatches %}
         <div class="alert alert-warning">
           In {{ employment.sap_mismatches|length }} Monat(en) weicht das geplante Gehalt vom SAP-Ist ab:

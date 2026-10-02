@@ -69,6 +69,8 @@ def get_timeline_allocations(project: Project) -> list[dict]:
         allocations.append({
             "employee": allocation.employment.staff_member,
             "category": allocation.employment.get_category(),
+            "status": allocation.employment.status,
+            "status_label": allocation.employment.get_status_display(),
             "start": allocation.start_date,
             "end": allocation.end_date or allocation.employment.end_date
         })
