@@ -90,10 +90,7 @@
     </tfoot>
 </table>
 
-<div class="d-flex justify-content-between align-items-center">
-    <h2 id="timeline">Staffing</h2>
-    <a class="btn btn-sm btn-outline-primary" href="{% url 'staffing:plan_employment' %}?project={{ project.acronym|urlencode }}">Anstellung planen</a>
-</div>
+<h2 id="timeline">Staffing</h2>
 <link rel="stylesheet" href="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.css' %}">
 <script src="{% static 'vendor/vis-timeline/vis-timeline-graph2d.min.js' %}"></script>
 
@@ -293,7 +290,10 @@
 <div id="timeline_scroll" class="timeline-scroll">
     <div id="timeline" class="timeline-shell"></div>
 </div>
-{% include "controlling/_employment_status_legend.html" %}
+<div class="d-flex justify-content-between align-items-start">
+    {% include "controlling/_employment_status_legend.html" %}
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'staffing:plan_employment' %}?project={{ project.acronym|urlencode }}">Anstellung planen</a>
+</div>
 
 <h2>Personalbudgetmittel</h2>
 
