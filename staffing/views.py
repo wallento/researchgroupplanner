@@ -429,6 +429,9 @@ def rebookings(request: HttpRequest):
         "rebookings": Rebooking.objects.select_related(
             "allocation__employment__staff_member", "allocation__budget_item__project", "allocation__landesstelle",
             "allocation__annual_pool_budget__annual_pool", "budget_item__project",
+        ).prefetch_related(
+            "allocation__budget_item__project__sap_funds", "budget_item__project__sap_funds",
+            "allocation__annual_pool_budget__annual_pool__sap_funds",
         ).order_by("start_date", "allocation__employment__staff_member__last_name"),
     })
 

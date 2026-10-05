@@ -363,6 +363,10 @@ class StaffFundingAllocation(models.Model):
         return f"{self.employment.staff_member} - {self.percentage}% ({self.start_date} - {end_date}) in {self.source()}"
 
 
+def _psp_elements(funds):
+    return ", ".join(sorted(fund.fund_number for fund in funds))
+
+
 class Rebooking(models.Model):
     """Open Umbuchung of (part of) an allocation to another budget.
 
@@ -392,6 +396,21 @@ class Rebooking(models.Model):
     @property
     def allocation_end(self):
         return self.allocation.end_date or self.allocation.employment.end_date
+
+    @property
+    def source_psp(self):
+        """PSP elements (SAP funds) of the source budget."""
+        allocation = self.allocation
+        if allocation.budget_item_id:
+            return _psp_elements(allocation.budget_item.project.sap_funds.all())
+        if allocation.annual_pool_budget_id:
+            return _psp_elements(allocation.annual_pool_budget.annual_pool.sap_funds.all())
+        return ""
+
+    @property
+    def target_psp(self):
+        """PSP elements (SAP funds) of the target budget."""
+        return _psp_elements(self.budget_item.project.sap_funds.all())
 
     @property
     def end(self):

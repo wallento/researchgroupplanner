@@ -288,6 +288,7 @@
                 <tr class="table-warning">
                   <td class="ps-4">
                     ⇄ Umbuchung nach Projekt {{ rebooking.budget_item.project.acronym }} - {{ rebooking.budget_item.title }}
+                    {% if rebooking.source_psp or rebooking.target_psp %}<span class="small text-muted">(PSP {{ rebooking.source_psp|default:"–" }} → {{ rebooking.target_psp|default:"–" }})</span>{% endif %}
                     <span class="badge text-bg-warning ms-1">offen</span>
                   </td>
                   <td>{{ rebooking.percentage }}%</td>

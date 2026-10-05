@@ -223,3 +223,17 @@ class AllocationUiTests(TestCase):
         self.assertContains(old, "⇄ Umbuchung (offen) → NEW")
         self.assertContains(new, "← OLD · 50")
         self.assertContains(new, "⇄ Umbuchung (offen) ← OLD")
+
+    def test_rebookings_show_psp_elements(self):
+        from projects.models import SAPFund
+
+        SAPFund.objects.create(fund_number="PSP-OLD-1", project=self.old_item.project)
+        SAPFund.objects.create(fund_number="PSP-NEW-1", project=self.new_item.project)
+        self.rebook()
+
+        listing = self.client.get(reverse("staffing:rebookings"))
+        details = self.client.get(reverse("staffing:details", args=[self.member.id]))
+
+        self.assertContains(listing, "PSP PSP-OLD-1")
+        self.assertContains(listing, "PSP PSP-NEW-1")
+        self.assertContains(details, "(PSP PSP-OLD-1 → PSP-NEW-1)")

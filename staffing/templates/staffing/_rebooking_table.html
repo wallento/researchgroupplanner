@@ -19,8 +19,12 @@
                     <td>
                         {% include "staffing/_allocation_source.html" with allocation=rebooking.allocation %}
                         <span class="text-muted small">({{ rebooking.allocation.percentage|floatformat:"-2" }} %)</span>
+                        {% if rebooking.source_psp %}<div class="small text-muted">PSP {{ rebooking.source_psp }}</div>{% endif %}
                     </td>
-                    <td><a href="{% url 'projects:details' rebooking.budget_item.project.acronym %}">{{ rebooking.budget_item.project.acronym }}</a> – {{ rebooking.budget_item.title }}</td>
+                    <td>
+                        <a href="{% url 'projects:details' rebooking.budget_item.project.acronym %}">{{ rebooking.budget_item.project.acronym }}</a> – {{ rebooking.budget_item.title }}
+                        {% if rebooking.target_psp %}<div class="small text-muted">PSP {{ rebooking.target_psp }}</div>{% endif %}
+                    </td>
                     <td>{{ rebooking.percentage|floatformat:"-2" }} %</td>
                     <td class="text-nowrap">{{ rebooking.start_date|date:"d.m.Y" }} – {{ rebooking.end|date:"d.m.Y" }}</td>
                     <td class="text-nowrap">{% include "staffing/_rebooking_actions.html" with next=rebookings_url %}</td>
