@@ -110,3 +110,11 @@ class OtherBudgetItemsPageTests(TestCase):
         self.assertEqual([p.acronym for p in response.context["completed_projects"]], ["OLDPROJ"])
         self.assertIn("TEST", [p.acronym for p in response.context["projects"]])
         self.assertContains(response, "Abgeschlossene Projekte")
+
+    def test_description_rest_is_italic(self):
+        self.conference.description = "Konferenz Berlin\nHotel und Bahn\nRechnung folgt"
+        self.conference.save()
+
+        response = self.client.get(reverse("projects:other_budget_items", args=["TEST"]))
+
+        self.assertContains(response, "Konferenz Berlin<br><em>Hotel und Bahn<br>Rechnung folgt</em>")

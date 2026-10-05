@@ -281,6 +281,8 @@ def other_budget_items(request: HttpRequest, acronym: str):
         for transaction in item.transactions:
             # Only bookings within the project years count, as on the details page.
             transaction.counts = transaction.date.year in years
+            first, _, rest = (transaction.description or "").partition("\n")
+            transaction.description_first, transaction.description_rest = first.rstrip("\r"), rest.strip()
             refs = sorted(references(transaction.sap_id))
             transaction.sap_links = [(reference, positions.get(reference, (None,))[0]) for reference in refs]
             status, transaction.sap_actual = _sap_status([positions[r][1] for r in refs if r in positions])
