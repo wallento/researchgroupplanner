@@ -7,6 +7,7 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("details/<int:staff_id>/", views.details, name="details"),
     path("plan/", views.plan_employment, name="plan_employment"),
+    path("details/<int:staff_id>/reservation/<int:position_id>/link/", views.link_reservation, name="link_reservation"),
     path("umbuchungen/", views.rebookings, name="rebookings"),
     path("employment/<int:employment_id>/estimate/", views.estimate_salaries, name="estimate_salaries"),
     path("employment/<int:first_id>/merge/<int:second_id>/", views.merge_employment, name="merge_employments"),

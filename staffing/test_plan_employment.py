@@ -42,7 +42,7 @@ class PlanEmploymentTests(TestCase):
         data = {
             "first_name": "Neue", "last_name": "Person", "budget_item": self.budget_item.id, "percentage": "50",
             "start_date": "2026-11-15", "end_date": "2028-06-30", "category": "researcher", "status": "planned",
-            "salary_category": self.e13.id, "start_level": "1",
+            "salary_category": self.e13.id, "start_level": "1", "statutory_health_insurance": "on",
         }
         data.update(overrides)
         return self.client.post(self.url, data)

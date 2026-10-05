@@ -184,7 +184,7 @@ def special_payment(employment, year):
     """
     from datetime import date, timedelta
 
-    from .tvl import rates_on, special_payment_cost
+    from .tvl import employment_rates, special_payment_cost
 
     rate = employment.salary_category.special_payment_rate if employment.salary_category_id else None
     december = date(year, 12, 1)
@@ -233,7 +233,10 @@ def special_payment(employment, year):
     special_gross = (base * rate / 100 * paid_months / 12).quantize(CENT)
     november = date(year, 11, 1)
     regular_gross = employment.tariff_gross_at(max(november, employment.start_date)) or base
-    return {"gross": special_gross, "cost": special_payment_cost(special_gross, regular_gross, rates_on(november))}
+    return {
+        "gross": special_gross,
+        "cost": special_payment_cost(special_gross, regular_gross, employment_rates(employment, november)),
+    }
 
 
 def apply_tariff_salaries(employment, from_month=None):
@@ -442,3 +445,64 @@ def rebooking_effects(rebookings=None):
             if allocation.budget_item_id:
                 effects.append((allocation.budget_item_id, sign, calculate_salary_for_allocation(allocation)))
     return effects
+
+
+def staff_reservations(staff_member):
+    """SAP Mittelreservierungen (staff positions) of a person from the latest import of each project fund.
+
+    A reservation belongs to the person if one of their allocations carries
+    its SAP reference ("linked") or, failing that, if the SAP name matches
+    ("by name"; link_candidates are allocations it could be linked to).
+    """
+    from datetime import date
+
+    from django.urls import reverse
+
+    from projects.models import SAPFund
+    from sap_integration.crosscheck import build_reconciliation, contract_periods, references
+    from sap_integration.names import match_staff_member
+
+    from .models import StaffFundingAllocation, StaffMember
+
+    allocations = list(
+        StaffFundingAllocation.objects.filter(employment__staff_member=staff_member).select_related("employment")
+    )
+    own_refs = set()
+    for allocation in allocations:
+        own_refs |= references(allocation.sap_reference)
+    all_staff = list(StaffMember.objects.all())
+
+    result = []
+    for fund in SAPFund.objects.filter(project__isnull=False, sap_imports__isnull=False).select_related("project").distinct():
+        reconciliation = None
+        sap_import = fund.sap_imports.order_by("-imported_at").first()
+        for position in sap_import.positions.filter(kind="staff"):
+            if position.is_transfer or not (position.contract_periods or position.commitment):
+                continue
+            linked = position.reference in own_refs
+            if not linked and (
+                not position.person_name or match_staff_member(position.person_name, all_staff) != staff_member
+            ):
+                continue
+            if reconciliation is None:
+                reconciliation = build_reconciliation(fund)
+            check = next((c for c in reconciliation.checks if c.position.id == position.id), None)
+            periods = contract_periods(position)
+            candidates = [] if linked else [
+                a for a in allocations
+                if not references(a.sap_reference) and any(
+                    a.start_date <= end and start <= (a.end_date or a.employment.end_date) for start, end in periods
+                )
+            ]
+            result.append({
+                "fund": fund,
+                "project": fund.project,
+                "position": position,
+                "url": reverse("sap_integration:position_detail", args=[fund.id, position.id]),
+                "periods": periods,
+                "linked": linked,
+                "link_candidates": candidates,
+                "issues": [issue["text"] for issue in check.obligo_issues] if check else [],
+                "ignored": bool(check and check.ignored),
+            })
+    return sorted(result, key=lambda r: (min((s for s, _ in r["periods"]), default=r["position"].first_date or date.max)))

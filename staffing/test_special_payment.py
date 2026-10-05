@@ -138,3 +138,29 @@ class SpecialPaymentTests(TestCase):
 
         # Base: E13 Stufe 2 in July to September 2026 (5.106,09 €), full year paid.
         self.assertEqual(bonus["gross"], (Decimal("5106.09") * Decimal("46.47") / 100).quantize(Decimal("0.01")))
+
+    def test_not_statutorily_insured_has_no_health_and_care_contributions(self):
+        e13 = self.e13
+        employment = self.employment(date(2026, 1, 1), date(2027, 4, 30), start_level=5,
+                                     level_start_date=date(2025, 2, 15), statutory_health_insurance=False)
+        SalaryCategory.objects.filter(id=e13.id).update(special_payment_rate=Decimal("46.47"))
+
+        # Andreas Stadler, August 2026 in SAP: 6.573,97 € gross, no health/care insurance.
+        cost = employment.tariff_amount_at(date(2026, 8, 1))
+        self.assertAlmostEqual(cost, Decimal("7698.20"), delta=Decimal("2.00"))
+
+        statutory = self.employment(date(2026, 1, 1), date(2027, 4, 30), start_level=5,
+                                    level_start_date=date(2025, 2, 15))
+        self.assertEqual(statutory.tariff_amount_at(date(2026, 8, 1)), Decimal("8303.56"))
+
+    def test_bonus_without_health_insurance_below_ceiling(self):
+        private = self.employment(date(2026, 1, 1), date(2026, 12, 31), statutory_health_insurance=False)
+        other = StaffMember.objects.create(first_name="Max", last_name="Gesetzlich")
+        statutory = Employment.objects.create(
+            staff_member=other, start_date=date(2026, 1, 1), end_date=date(2026, 12, 31), percentage=Decimal("100"),
+            salary_category=self.e13, start_level=1, level_start_date=date(2026, 1, 1),
+        )
+
+        # Stufe 1 is below the health insurance ceiling, so the bonus carries health/care insurance.
+        self.assertLess(special_payment(private, 2026)["cost"], special_payment(statutory, 2026)["cost"])
+        self.assertEqual(special_payment(private, 2026)["gross"], special_payment(statutory, 2026)["gross"])

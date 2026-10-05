@@ -34,6 +34,7 @@
         <div class="col-md-4">{% bootstrap_field form.salary_category %}</div>
         <div class="col-md-4">{% bootstrap_field form.start_level %}</div>
         <div class="col-md-4">{% bootstrap_field form.level_start_date %}</div>
+        <div class="col-md-12">{% bootstrap_field form.statutory_health_insurance %}</div>
     </div>
     <button type="submit" class="btn btn-primary">Anstellung anlegen</button>
     <a class="btn btn-link" href="{% if project %}{% url 'projects:details' project.acronym %}{% else %}{% url 'staffing:index' %}{% endif %}">Abbrechen</a>

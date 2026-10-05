@@ -28,6 +28,7 @@ from .utils import (
     get_sap_correction_links,
     get_sap_salary_mismatches,
     level_defaults,
+    staff_reservations,
 )
 
 def index(request):
@@ -122,9 +123,13 @@ def details(request: HttpRequest, staff_id: int):
             for month, salary in employment.salaries_by_month.items()
         ]
 
+    reservations = staff_reservations(staff_member)
+    for reservation in reservations:
+        allocation_timeline.extend(_reservation_timeline_entries(reservation))
     return render(request, "staffing/details.html", {
         "staff_member": staff_member,
         "employments": employments,
+        "reservations": reservations,
         "allocation_timeline": allocation_timeline,
         "salary_categories": SalaryCategory.objects.all(),
         "levels": range(1, MAX_LEVEL + 1),
@@ -196,6 +201,51 @@ def _rebooking_timeline_entries(rebooking):
     ]
 
 
+def _reservation_timeline_entries(reservation):
+    """Thin bars of the SAP contract periods of a reservation in its project row."""
+    project, position = reservation["project"], reservation["position"]
+    share = f" · {position.percentage.normalize():f}\u00a0%" if position.percentage else ""
+    return [
+        {
+            "id": f"sap-{position.id}-{index}",
+            "group": f"project-{project.id}",
+            "label": project.acronym,
+            "link": reservation["url"],
+            "title": (
+                f"SAP-Mittelreservierung {position.reference} ({position.contract_type or 'Vertrag'}{share}): "
+                f"{start:%d.%m.%Y} – {end:%d.%m.%Y}"
+                + ("" if reservation["linked"] else " – nur über den Namen zugeordnet")
+            ),
+            "content": f"SAP {position.contract_type or 'Vertrag'}{share}",
+            "percentage": float(position.percentage or 0),
+            "status": "contract",
+            "status_label": "",
+            "rebooking": None,
+            "sap_contract": True,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+        }
+        for index, (start, end) in enumerate(reservation["periods"])
+    ]
+
+
+@require_POST
+def link_reservation(request: HttpRequest, staff_id: int, position_id: int):
+    """Add the SAP reference of a name-matched reservation to the person's matching allocations."""
+    from sap_integration.transform import link_allocations
+
+    staff_member = get_object_or_404(StaffMember, id=staff_id)
+    reservation = next(
+        (r for r in staff_reservations(staff_member) if r["position"].id == position_id and not r["linked"]), None,
+    )
+    if reservation is None or not reservation["link_candidates"]:
+        messages.error(request, "Keine passende Zuordnung zum Verknüpfen gefunden.")
+    else:
+        link_allocations(reservation["position"], reservation["link_candidates"])
+        messages.success(request, f"SAP-Reservierung {reservation['position'].reference} verknüpft.")
+    return redirect("staffing:details", staff_id=staff_member.id)
+
+
 def plan_employment(request: HttpRequest):
     """Create an employment with its project allocation and projected salaries."""
     project = None
@@ -229,6 +279,7 @@ def plan_employment(request: HttpRequest):
                 salary_category=data["salary_category"],
                 start_level=data["start_level"],
                 level_start_date=data["level_start_date"] if data["start_level"] else None,
+                statutory_health_insurance=data["statutory_health_insurance"],
             )
             StaffFundingAllocation.objects.create(
                 employment=employment,
@@ -267,6 +318,9 @@ def _estimate_from(employment, sap_actuals):
 def estimate_salaries(request: HttpRequest, employment_id: int):
     employment = get_object_or_404(Employment.objects.select_related("staff_member", "salary_category"), id=employment_id)
     from_month = request.POST.get("from_month") or None
+    if request.POST.get("insurance_field"):
+        employment.statutory_health_insurance = bool(request.POST.get("statutory_health_insurance"))
+        employment.save(update_fields=["statutory_health_insurance"])
     if request.POST.get("salary_category"):
         # Pay grade and level entered together with the estimate are stored on the employment.
         employment.salary_category = get_object_or_404(SalaryCategory, id=request.POST["salary_category"])

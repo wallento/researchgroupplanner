@@ -11,7 +11,7 @@ with health/care insurance capped at the KV/PV ceiling and pension/
 unemployment insurance at the RV/AV ceiling (Beitragsbemessungsgrenzen).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -156,3 +156,11 @@ def special_payment_cost(special_gross, regular_gross, rates):
         + _percent(health_base, rates.health)
         + _percent(health_base, rates.care)
     )
+
+
+def employment_rates(employment, day):
+    """Employer rates on a day for an employment; no health/care insurance if not statutorily insured."""
+    rates = rates_on(day)
+    if not employment.statutory_health_insurance:
+        rates = replace(rates, health=Decimal("0"), care=Decimal("0"))
+    return rates

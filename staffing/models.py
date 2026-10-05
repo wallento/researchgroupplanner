@@ -175,6 +175,11 @@ class Employment(models.Model):
         null=True,
         blank=True,
     )
+    statutory_health_insurance = models.BooleanField(
+        "Gesetzlich krankenversichert",
+        default=True,
+        help_text="Aus, wenn keine Arbeitgeberanteile zur Kranken- und Pflegeversicherung anfallen (z. B. privat versichert).",
+    )
     level_start_date = models.DateField(
         "Stufenbeginn (fiktiv)",
         null=True,
@@ -214,7 +219,19 @@ class Employment(models.Model):
         level = self.level_at(day)
         if level is None or self.salary_category_id is None:
             return None
-        amount = tariff_amount(self.salary_category, level, day)
+        if self.statutory_health_insurance:
+            amount = tariff_amount(self.salary_category, level, day)
+        else:
+            # The table includes health/care insurance; recompute from the gross amount without it.
+            from .tvl import employer_cost, employment_rates
+
+            entry = tariff_entry(self.salary_category, level, day)
+            if entry is None:
+                amount = None
+            elif entry.gross is None:
+                amount = entry.amount  # no gross amount stored: fall back to the table value
+            else:
+                amount = employer_cost(entry.gross, employment_rates(self, day))
         if amount is None:
             return None
         return (amount * Decimal(self.percentage) / Decimal("100")).quantize(Decimal("0.01"))

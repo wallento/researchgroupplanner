@@ -343,3 +343,40 @@ class CrossFundShiftTests(ReconciliationTestBase):
 
         self.assertEqual(check.salary_mismatch_months, [])
         self.assertTrue(any("Verschiebung zwischen Fonds" in note for note in check.notes))
+
+
+@override_settings(SAP_ENABLED=False, SAP_GM_IMPORT_ENABLED=True, STORAGES=STATIC_STORAGE)
+class StaffReservationTests(ReconciliationTestBase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_user("user", password="x"))
+        self.member = StaffMember.objects.create(first_name="Erika", last_name="Muster-Frau")
+        employment = Employment.objects.create(staff_member=self.member, start_date=date(2026, 1, 1),
+                                               end_date=date(2026, 3, 31), percentage=Decimal("50"))
+        self.allocation = StaffFundingAllocation.objects.create(
+            employment=employment, budget_item=self.staff_item, percentage=Decimal("50"), start_date=date(2026, 1, 1),
+        )
+
+    def test_reservation_matched_by_name_can_be_linked(self):
+        from staffing.utils import staff_reservations
+
+        reservation = next(r for r in staff_reservations(self.member) if r["position"].reference == "4000100")
+        self.assertFalse(reservation["linked"])
+        self.assertEqual(reservation["link_candidates"], [self.allocation])
+        details = self.client.get(reverse("staffing:details", args=[self.member.id]))
+        self.assertContains(details, "über Namen zugeordnet")
+        self.assertContains(details, '"sap_contract": true')
+
+        self.client.post(reverse("staffing:link_reservation", args=[self.member.id, reservation["position"].id]))
+
+        self.allocation.refresh_from_db()
+        self.assertEqual(self.allocation.sap_reference, "4000100")
+        reservation = next(r for r in staff_reservations(self.member) if r["position"].reference == "4000100")
+        self.assertTrue(reservation["linked"])
+
+    def test_other_people_do_not_see_the_reservation(self):
+        from staffing.utils import staff_reservations
+
+        other = StaffMember.objects.create(first_name="Max", last_name="Andere")
+
+        self.assertEqual(staff_reservations(other), [])

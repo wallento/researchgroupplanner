@@ -39,6 +39,10 @@ class PlanEmploymentForm(forms.Form):
         required=False,
         initial=1,
     )
+    statutory_health_insurance = forms.BooleanField(
+        label="Gesetzlich krankenversichert", required=False, initial=True,
+        help_text="Aus, wenn keine Arbeitgeberanteile zur Kranken- und Pflegeversicherung anfallen.",
+    )
     level_start_date = forms.DateField(
         label="Stufenbeginn (fiktiv)",
         widget=DateInput(),

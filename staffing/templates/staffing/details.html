@@ -107,7 +107,8 @@
                   start: start,
                   end: end,
                   className: (entry.link ? 'has-link ' : '') + 'status-' + entry.status
-                      + (entry.rebooking === 'in' ? ' allocation-rebook' : '') + (entry.rebooking === 'out' ? ' allocation-rebook-out' : ''),
+                      + (entry.rebooking === 'in' ? ' allocation-rebook' : '') + (entry.rebooking === 'out' ? ' allocation-rebook-out' : '')
+                      + (entry.sap_contract ? ' sap-contract' : ''),
               };
           });
 
@@ -162,7 +163,60 @@
   <div class="timeline-scroll mb-1">
       <div id="allocation_timeline"></div>
   </div>
-  {% include "controlling/_employment_status_legend.html" %}
+  {% include "controlling/_employment_status_legend.html" with show_sap_contracts=reservations %}
+
+  {% if reservations %}
+    <h2>SAP-Mittelreservierungen</h2>
+    <table class="table table-bordered table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Projekt / SAP-Referenz</th>
+          <th>Vertragszeitraum laut SAP</th>
+          <th>Umfang</th>
+          <th class="text-end">Ist bisher</th>
+          <th class="text-end">Offenes Obligo</th>
+          <th>Hinweise</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for reservation in reservations %}
+          <tr{% if reservation.issues and not reservation.ignored %} class="table-warning"{% endif %}>
+            <td>
+              <a href="{% url 'projects:details' reservation.project.acronym %}">{{ reservation.project.acronym }}</a>
+              · <a href="{{ reservation.url }}" title="SAP-Position im Abgleich öffnen">{{ reservation.position.reference }}</a>
+              {% if reservation.position.contract_type %}<span class="text-muted small">({{ reservation.position.contract_type }})</span>{% endif %}
+            </td>
+            <td class="text-nowrap">
+              {% for start, end in reservation.periods %}<div>{{ start|date:"d.m.Y" }} – {{ end|date:"d.m.Y" }}</div>{% empty %}<span class="text-muted">–</span>{% endfor %}
+            </td>
+            <td class="text-nowrap">
+              {% if reservation.position.percentage %}{{ reservation.position.percentage|floatformat:"-2" }} %{% endif %}
+              {% if reservation.position.weekly_hours %}{{ reservation.position.weekly_hours|floatformat:"-2" }} h/Woche{% endif %}
+            </td>
+            <td class="text-end text-nowrap">€&nbsp;{{ reservation.position.actual }}</td>
+            <td class="text-end text-nowrap">€&nbsp;{{ reservation.position.commitment }}</td>
+            <td class="small">
+              {% if not reservation.linked %}
+                <div class="mb-1">
+                  <span class="badge text-bg-info">über Namen zugeordnet</span>
+                  {% if reservation.link_candidates %}
+                    <form method="post" action="{% url 'staffing:link_reservation' staff_member.id reservation.position.id %}" class="d-inline ms-1">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-primary py-0" title="SAP-Referenz bei {{ reservation.link_candidates|length }} passenden Zuordnung(en) eintragen">Verknüpfen</button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted">keine passende Zuordnung – über den <a href="{{ reservation.url }}">SAP-Abgleich</a> übernehmen</span>
+                  {% endif %}
+                </div>
+              {% endif %}
+              {% for issue in reservation.issues %}<div>{{ issue }}</div>{% endfor %}
+              {% if reservation.ignored %}<div class="text-muted">Im SAP-Abgleich ignoriert.</div>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
 
   <div class="d-flex justify-content-between align-items-center">
     <h2>Anstellungen & Gehälter</h2>
@@ -187,6 +241,7 @@
       {% endif %}
       <h3>{{ employment.get_category }}{% if employment.salary_category %}, {{ employment.salary_category }}{% endif %} ({{ employment.start_date }} - {{ employment.end_date }}, {{ employment.percentage }}%)
         {% if employment.status != "contract" %}<span class="badge text-bg-info align-middle fs-6">{{ employment.get_status_display }}</span>{% endif %}
+        {% if not employment.statutory_health_insurance %}<span class="badge text-bg-light border align-middle fs-6" title="Ohne Arbeitgeberanteile zur Kranken- und Pflegeversicherung">privat versichert</span>{% endif %}
       </h3>
       {% if employment.level_steps %}
         <p class="text-muted">
@@ -254,6 +309,11 @@
           <form method="post" action="{% url 'staffing:estimate_salaries' employment.id %}" class="d-flex gap-2 align-items-center"
                 onsubmit="return confirm('Gehälter ab dem gewählten Monat aus den Entgelttabellen schätzen? Bestehende Werte ab diesem Monat werden ersetzt.');">
             {% csrf_token %}
+<div class="form-check form-check-inline small mb-0">
+              <input type="hidden" name="insurance_field" value="1">
+              <input class="form-check-input" type="checkbox" name="statutory_health_insurance" id="estimate-insurance-{{ employment.id }}-quick"{% if employment.statutory_health_insurance %} checked{% endif %}>
+              <label class="form-check-label text-nowrap" for="estimate-insurance-{{ employment.id }}-quick">gesetzlich KV</label>
+            </div>
             <label class="small text-muted text-nowrap" for="estimate-from-{{ employment.id }}">ab</label>
             <input type="month" id="estimate-from-{{ employment.id }}" name="from_month" value="{{ employment.estimate_from }}" class="form-control form-control-sm" style="width: 10rem;">
             <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">Gehälter schätzen</button>
@@ -295,6 +355,13 @@
             <div class="col-sm-2">
               <label class="form-label small" for="estimate-month-{{ employment.id }}">ab</label>
               <input type="month" name="from_month" id="estimate-month-{{ employment.id }}" class="form-control form-control-sm" value="{{ employment.estimate_from }}">
+            </div>
+            <div class="col-sm-12">
+              <div class="form-check form-check-inline small mb-0">
+              <input type="hidden" name="insurance_field" value="1">
+              <input class="form-check-input" type="checkbox" name="statutory_health_insurance" id="estimate-insurance-{{ employment.id }}-full"{% if employment.statutory_health_insurance %} checked{% endif %}>
+              <label class="form-check-label text-nowrap" for="estimate-insurance-{{ employment.id }}-full">gesetzlich krankenversichert (Arbeitgeberanteile Kranken-/Pflegeversicherung)</label>
+            </div>
             </div>
             <div class="col-sm-2">
               <button type="submit" class="btn btn-sm btn-primary w-100">Schätzen</button>
