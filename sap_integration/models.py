@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
@@ -12,6 +13,8 @@ from staffing.models import StaffMember
 TRANSFER_VALUE_TYPE = "66"
 # FMM-Werttyp of Mittelreservierungen (not reduced by the actual payment).
 RESERVATION_VALUE_TYPE = "81"
+# FMM-Werttypen of actual bookings (payments, transfers).
+ACTUAL_VALUE_TYPES = {"66", "99", "Z1"}
 
 
 class SAPPositionKind(models.TextChoices):
@@ -90,6 +93,15 @@ class SAPPosition(models.Model):
     @property
     def total(self):
         return self.actual + self.commitment
+
+    @property
+    def actual_date(self):
+        """Date of the last actual booking (e.g. the invoice payment), or None if nothing was paid."""
+        dates = [
+            b["date"] for b in self.bookings
+            if b.get("value_type") in ACTUAL_VALUE_TYPES and b.get("date") and Decimal(b["amount"])
+        ]
+        return date.fromisoformat(max(dates)) if dates else None
 
     @property
     def reservation_commitment(self):

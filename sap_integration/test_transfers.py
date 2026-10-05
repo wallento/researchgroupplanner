@@ -380,3 +380,25 @@ class StaffReservationTests(ReconciliationTestBase):
         other = StaffMember.objects.create(first_name="Max", last_name="Andere")
 
         self.assertEqual(staff_reservations(other), [])
+
+
+class TransactionDateTests(ReconciliationTestBase):
+    def test_transaction_uses_actual_booking_date(self):
+        from sap_integration.transform import create_transaction, update_transaction_amount
+
+        position = self.check("8000001").position  # travel: reservation 2026-01-31, payment 2026-02-10
+
+        planner_transaction = create_transaction(position, self.travel_item)
+        self.assertEqual(planner_transaction.date, date(2026, 2, 10))
+
+        planner_transaction.date = date(2026, 1, 1)
+        planner_transaction.save()
+        update_transaction_amount(position, planner_transaction)
+        planner_transaction.refresh_from_db()
+        self.assertEqual(planner_transaction.date, date(2026, 2, 10))
+
+    def test_without_payment_falls_back_to_first_booking(self):
+        position = self.check("4000300").position  # test reservation without amount
+
+        self.assertIsNone(position.actual_date)
+

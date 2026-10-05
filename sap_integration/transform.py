@@ -196,7 +196,7 @@ def apply_monthly_salaries(allocation, monthly_costs):
 def create_transaction(position, budget_item):
     return OtherBudgetItemTransaction.objects.create(
         budget_item=budget_item,
-        date=position.first_date or date.today(),
+        date=position.actual_date or position.first_date or date.today(),
         amount=position.planned_amount,
         description=_transaction_description(position),
         sap_id=position.reference,
@@ -206,7 +206,9 @@ def create_transaction(position, budget_item):
 @transaction.atomic
 def update_transaction_amount(position, planner_transaction):
     planner_transaction.amount = position.planned_amount
-    planner_transaction.save(update_fields=["amount"])
+    if position.actual_date:
+        planner_transaction.date = position.actual_date
+    planner_transaction.save(update_fields=["amount", "date"])
 
 
 @transaction.atomic
