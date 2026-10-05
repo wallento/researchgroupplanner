@@ -8,15 +8,58 @@
 <h2 class="mt-3">Drittmittel pro Jahr</h2>
 
 <div class="alert alert-success" role="alert">
-    <strong>Kumulierte Drittmittel (Gesamtdatenbank):</strong>
+    <strong>Kumulierte Drittmittel (Gesamtdatenbank, inkl. Overhead):</strong>
     €&nbsp;{{ statistics_total_third_party_funds }}
+    <div class="small mt-1">
+        davon Overhead €&nbsp;{{ funds_split.overhead }} ·
+        geplant (ohne Overhead) €&nbsp;{{ funds_split.planned }} ·
+        noch nicht verplant €&nbsp;{{ funds_split.unplanned }}
+        <br>SAP-Ist bisher (Projektexporte) €&nbsp;{{ funds_split.actual }}
+    </div>
 </div>
+
+<p class="text-muted small">
+    <strong>Mittel</strong>: Projektbudgets gleichmäßig über die Laufzeit verteilt ·
+    <strong>Overhead</strong>: gleichmäßig über die Laufzeit ·
+    <strong>Geplant</strong>: Personalkosten aus den Zuordnungen, Sachmittel nach Buchungsdatum ·
+    <strong>SAP-Ist</strong>: bezahlte Beträge aus den Projektexporten (Personal nach Gehaltsmonat, ohne Mittelabrufe).
+</p>
 
 <div class="card mb-4">
     <div class="card-body">
         <canvas id="thirdPartyFundsChart" height="120"></canvas>
     </div>
 </div>
+
+<table class="table table-bordered table-sm">
+    <thead>
+        <tr>
+            <th>Jahr</th>
+            <th class="text-end">Mittel (inkl. Overhead)</th>
+            <th class="text-end">Overhead</th>
+            <th class="text-end">Geplant (ohne Overhead)</th>
+            <th class="text-end">SAP-Ist</th>
+            <th class="text-end">Geplant + Overhead − Mittel</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in comparison_rows %}
+            <tr>
+                <th scope="row">{{ row.year }}</th>
+                <td class="text-end">€&nbsp;{{ row.funds }}</td>
+                <td class="text-end">€&nbsp;{{ row.overhead }}</td>
+                <td class="text-end">€&nbsp;{{ row.planned }}</td>
+                <td class="text-end">{% if row.actual is not None %}€&nbsp;{{ row.actual }}{% else %}<span class="text-muted">–</span>{% endif %}</td>
+                <td class="text-end{% if row.difference > 0 %} text-danger{% endif %}">€&nbsp;{{ row.difference }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{{ comparison_years|json_script:"stats-comparison-years" }}
+{{ comparison_funds|json_script:"stats-comparison-funds" }}
+{{ comparison_planned|json_script:"stats-comparison-planned" }}
+{{ comparison_overhead|json_script:"stats-comparison-overhead" }}
+{{ comparison_actual|json_script:"stats-comparison-actual" }}
 
 {% if OVERHEAD_SPLIT_ENABLED %}
     <h2 class="mt-4">Overhead-Verteilung pro Jahr und Institut</h2>
@@ -158,8 +201,11 @@
 <script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
 <script>
     (function () {
-        var years = JSON.parse(document.getElementById('stats-years').textContent);
-        var yearlyValues = JSON.parse(document.getElementById('stats-yearly-values').textContent);
+        var years = JSON.parse(document.getElementById('stats-comparison-years').textContent);
+        var yearlyValues = JSON.parse(document.getElementById('stats-comparison-funds').textContent);
+        var plannedValues = JSON.parse(document.getElementById('stats-comparison-planned').textContent);
+        var overheadValues = JSON.parse(document.getElementById('stats-comparison-overhead').textContent);
+        var actualValues = JSON.parse(document.getElementById('stats-comparison-actual').textContent);
 
         var canvas = document.getElementById('thirdPartyFundsChart');
         if (!canvas || !years.length) {
@@ -172,11 +218,42 @@
                 datasets: [
                     {
                         type: 'bar',
-                        label: 'Drittmittel pro Jahr',
+                        label: 'Mittel (verteilt, inkl. Overhead)',
                         data: yearlyValues,
                         backgroundColor: '#004990',
                         borderColor: '#003a73',
                         borderWidth: 1,
+                        stack: 'funds',
+                        yAxisID: 'y',
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Geplant (ohne Overhead)',
+                        data: plannedValues,
+                        backgroundColor: '#8fb8de',
+                        borderColor: '#4e78b4',
+                        borderWidth: 1,
+                        stack: 'planned',
+                        yAxisID: 'y',
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Overhead',
+                        data: overheadValues,
+                        backgroundColor: '#c9b6e8',
+                        borderColor: '#6f42c1',
+                        borderWidth: 1,
+                        stack: 'planned',
+                        yAxisID: 'y',
+                    },
+                    {
+                        type: 'bar',
+                        label: 'SAP-Ist',
+                        data: actualValues,
+                        backgroundColor: '#198754',
+                        borderColor: '#146c43',
+                        borderWidth: 1,
+                        stack: 'actual',
                         yAxisID: 'y',
                     }
                 ]
@@ -201,7 +278,11 @@
                     }
                 },
                 scales: {
+                    x: {
+                        stacked: true
+                    },
                     y: {
+                        stacked: true,
                         beginAtZero: true,
                         ticks: {
                             callback: function (value) {

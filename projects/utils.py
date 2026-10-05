@@ -242,3 +242,40 @@ def project_budget_overview(projects):
         )
     project_totals["other_percent"] = budget_usage_percent(project_totals["other_used"], project_totals["other"])
     return projects, project_totals
+
+
+def planned_expenses_by_year(projects) -> dict[str, dict[str, Decimal]]:
+    """Planned costs per calendar year, split into "staff", "other" and "overhead".
+
+    Staff from the allocations, other costs by transaction date. Overhead has
+    no dates of its own and is spread evenly over the project duration (incl.
+    extension), like the funds.
+    """
+    from .models import OtherBudgetItemTransaction
+
+    totals = {}
+
+    def add(year, amount, part):
+        parts = totals.setdefault(year, {"staff": Decimal("0.00"), "other": Decimal("0.00"), "overhead": Decimal("0.00")})
+        parts[part] += Decimal(amount)
+
+    project_ids = [project.id for project in projects]
+    for allocation in StaffFundingAllocation.objects.filter(budget_item__project_id__in=project_ids).select_related("employment"):
+        for month, amount in calculate_salary_for_allocation(allocation).months.items():
+            add(month[:4], amount, "staff")
+    for transaction in OtherBudgetItemTransaction.objects.filter(budget_item__project_id__in=project_ids):
+        add(str(transaction.date.year), transaction.amount, "other")
+    for project in projects:
+        overhead = sum((item.amount for item in project.overheadbudgetitem_set.all()), Decimal("0.00"))
+        end = project.get_effective_end_date()
+        months = (end.year - project.start_date.year) * 12 + (end.month - project.start_date.month) + 1
+        if not overhead or months <= 0:
+            continue
+        current = project.start_date.replace(day=1)
+        while current <= end.replace(day=1):
+            add(str(current.year), overhead / months, "overhead")
+            current += relativedelta(months=1)
+    return {
+        year: {part: amount.quantize(Decimal("0.01")) for part, amount in parts.items()}
+        for year, parts in totals.items()
+    }

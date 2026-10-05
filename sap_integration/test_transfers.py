@@ -402,3 +402,33 @@ class TransactionDateTests(ReconciliationTestBase):
 
         self.assertIsNone(position.actual_date)
 
+
+class YearlyComparisonTests(ReconciliationTestBase):
+    def test_sap_actuals_by_year_without_income(self):
+        from sap_integration.crosscheck import sap_actuals_by_year
+
+        # Staff 2 × 3.000 €, travel 480 €, purchase 100 €; the income (Mittelabruf) is left out.
+        self.assertEqual(sap_actuals_by_year(), {"2026": Decimal("6580.00")})
+
+    def test_planned_expenses_by_year(self):
+        from projects.models import OtherBudgetItemTransaction, OverheadBudgetItem
+        from projects.utils import planned_expenses_by_year
+        from staffing.models import EmploymentSalaries
+
+        member = StaffMember.objects.create(first_name="Erika", last_name="Muster-Frau")
+        employment = Employment.objects.create(staff_member=member, start_date=date(2026, 11, 1),
+                                               end_date=date(2027, 2, 28), percentage=Decimal("100"))
+        EmploymentSalaries.objects.create(employment=employment, salary=Decimal("1000"),
+                                          start_date=date(2026, 11, 1), end_date=date(2027, 2, 28))
+        StaffFundingAllocation.objects.create(employment=employment, budget_item=self.staff_item,
+                                              percentage=Decimal("100"), start_date=date(2026, 11, 1))
+        OtherBudgetItemTransaction.objects.create(budget_item=self.travel_item, date=date(2027, 3, 1), amount=Decimal("250"))
+        OverheadBudgetItem.objects.create(project=self.project, amount=Decimal("1200"))
+
+        planned = planned_expenses_by_year([self.project])
+
+        # Staff 4 × 1.000 € (Nov 2026 – Feb 2027), travel 250 €, overhead 1.200 € spread over the duration.
+        self.assertEqual(planned["2026"]["staff"], Decimal("2000.00"))
+        self.assertEqual(planned["2027"]["staff"], Decimal("2000.00"))
+        self.assertEqual(planned["2027"]["other"], Decimal("250.00"))
+        self.assertAlmostEqual(sum(p["overhead"] for p in planned.values()), Decimal("1200.00"), delta=Decimal("0.10"))
